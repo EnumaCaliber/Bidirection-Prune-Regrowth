@@ -1,0 +1,18 @@
+# PyTorch models
+*.pth
+*.pt
+
+# Compressed files
+*.tar.gz
+*.tgz
+*.zip
+*.rar
+
+/wandb
+/densenet
+/effnet
+/vgg16
+/resnet20
+/data
+/rl_regrow_savedir
+/rl_saliency_regrow_savedir
