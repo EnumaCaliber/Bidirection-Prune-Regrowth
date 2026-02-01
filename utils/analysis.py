@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-
+import os
 def plot_weight_distributions(model, model_name, save_path="./weight_distributions", title="Weight Distributions"):
     os.makedirs(save_path, exist_ok=True)
 

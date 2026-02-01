@@ -15,7 +15,7 @@ def load_model(net, ckpt_path):
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir(ckpt_path), 'Error: no checkpoint directory found!'
-    target_path = os.path.join(ckpt_path, "ckpt.pth")
+    target_path = os.path.join(ckpt_path, "pretrain_densenet_ckpt.pth")
     checkpoint = torch.load(target_path)
     
     # # Strip 'module.' prefix from keys
@@ -26,6 +26,27 @@ def load_model(net, ckpt_path):
     #     name = k.replace('module.', '')  # remove 'module.' prefix
     #     new_state_dict[name] = v
     
+    net.load_state_dict(checkpoint['net'])
+    best_acc = checkpoint['acc']
+    start_epoch = checkpoint['epoch']
+    return net, best_acc, start_epoch
+
+
+def load_model_name(net, ckpt_path,name):
+    # Load checkpoint.
+    print('==> Resuming from checkpoint..')
+    assert os.path.isdir(ckpt_path), 'Error: no checkpoint directory found!'
+    target_path = os.path.join(ckpt_path, f"pretrain_{name}_ckpt.pth")
+    checkpoint = torch.load(target_path)
+
+    # # Strip 'module.' prefix from keys
+    # from collections import OrderedDict
+    # new_state_dict = OrderedDict()
+
+    # for k, v in checkpoint['net'].items():
+    #     name = k.replace('module.', '')  # remove 'module.' prefix
+    #     new_state_dict[name] = v
+
     net.load_state_dict(checkpoint['net'])
     best_acc = checkpoint['acc']
     start_epoch = checkpoint['epoch']

@@ -34,12 +34,12 @@ from scipy.stats import pearsonr, spearmanr
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
+import wandb
 from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 from utils.analysis_utils import (
     BlockwiseFeatureExtractor, compute_block_ssim,
-    load_model, prune_weights_reparam, count_pruned_params
+    load_model, prune_weights_reparam, count_pruned_params, load_model_name
 )
 
 
@@ -201,7 +201,7 @@ def apply_regrowth_to_layer(model, layer_name, num_weights, reference_weights, r
     return num_from_ref, num_random
 
 
-def finetune_model(model, train_loader, test_loader, device, epochs=300, lr=0.0003, patience=100):
+def finetune_model(model, train_loader, test_loader, device, epochs=300, lr=0.0003, patience=30):
     """
     Finetune model after regrowth with early stopping.
     
@@ -290,6 +290,13 @@ def analyze_single_layer_regrowth(args):
     """
     Main analysis function: test regrowth on each layer individually
     """
+
+    wandb.init(
+        project="single-layer-regrowth",
+        name=f"{args.m_name}_s{args.start_sparsity}_t{args.target_sparsity}_{args.starting_checkpoint}",
+        config=vars(args)
+    )
+
     print("="*80)
     print("Single-Layer Regrowth Analysis")
     print("="*80)
@@ -313,8 +320,8 @@ def analyze_single_layer_regrowth(args):
     # Load pretrained model
     print("\nLoading pretrained model...")
     model_pretrained = model_loader(args.m_name, device)
-    load_model(model_pretrained, f'./{args.m_name}/checkpoint')
-    
+#    load_model(model_pretrained, f'./{args.m_name}/checkpoint')
+    load_model_name(model_pretrained, f'./{args.m_name}/checkpoint', args.m_name)
     # Add masks to pretrained for SSIM computation
     prune_weights_reparam(model_pretrained)
     
@@ -330,7 +337,7 @@ def analyze_single_layer_regrowth(args):
     else:
         # Load from checkpoint
         if args.starting_checkpoint == 'oneshot':
-            checkpoint_path = f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_{args.target_sparsity}.pth'
+            checkpoint_path = f'./{args.m_name}/ckpt_after_prune_oneshot/pruned_oneshot_mask_{args.target_sparsity}.pth'
         else:
             # Map sparsity to iteration number (rough approximation)
             iteration = int(args.target_sparsity * 10)
@@ -347,14 +354,14 @@ def analyze_single_layer_regrowth(args):
     
     if args.starting_checkpoint == 'oneshot':
         if args.m_name == "resnet20":
-            checkpoint_path = f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_0.99.pth'
+            checkpoint_path = f'./{args.m_name}/ckpt_after_prune_oneshot/pruned_oneshot_mask_{args.start_sparsity}.pth'
         elif args.m_name == "vgg16":
-            checkpoint_path = f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_0.995.pth'
+            checkpoint_path = f'./{args.m_name}/ckpt_after_prune_oneshot/pruned_oneshot_mask_{args.start_sparsity}.pth'
         else:
-            checkpoint_path = f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_{args.start_sparsity}.pth'
+            checkpoint_path = f'./{args.m_name}/ckpt_after_prune_oneshot/pruned_oneshot_mask_{args.start_sparsity}.pth'
     else:
         iteration = int(args.start_sparsity * 10)
-        checkpoint_path = f'./iterative_0.4_10/{args.m_name}/pruned_finetuned_mask_it{iteration}.pth'
+        checkpoint_path = f'./ckpt_after_prune_0.3_epoch_finetune_40/{args.m_name}/pruned_finetuned_mask_0.9903.pth'
     
     print(f"  Loading from: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path)
@@ -721,11 +728,11 @@ def analyze_single_layer_regrowth(args):
     print("\n" + "="*80)
     print("Analysis Complete!")
     print("="*80)
-
+    wandb.finish()
 
 def main():
     parser = argparse.ArgumentParser(description='Single-Layer Regrowth Analysis')
-    
+
     # Model and data
     parser.add_argument('--m_name', type=str, default='resnet20',
                        help='Model name')
@@ -733,7 +740,7 @@ def main():
                        help='Data directory')
     
     # Regrowth parameters
-    parser.add_argument('--target_sparsity', type=float, default=0.97,
+    parser.add_argument('--target_sparsity', type=float, default=0.0,
                        help='Target sparsity for reference model AND regrowth target (0.0 = pretrained, 0.95, 0.97, etc.)')
     parser.add_argument('--start_sparsity', type=float, default=0.98,
                        help='Starting sparsity (highly pruned model)')
