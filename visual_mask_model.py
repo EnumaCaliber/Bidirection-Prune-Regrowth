@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 
 
-def visualize_pruning_heatmap(checkpoint_path, save_path='prune_visual.png'):
+def visualize_pruning_heatmap(checkpoint_path, save_path):
     checkpoint = torch.load(checkpoint_path, map_location='cpu')
 
     state_dict = checkpoint
@@ -49,8 +49,12 @@ def visualize_pruning_heatmap(checkpoint_path, save_path='prune_visual.png'):
 
 
 if __name__ == "__main__":
-    model_name = "resnet20"
+    model_name = "effnet"
     root_path = 'ckpt_after_prune_oneshot'
-    prun_name = 'pruned_oneshot_mask_0.98.pth'
+    prun_name = 'pruned_oneshot_mask_0.995.pth'
+
+    visual_root = "visual_mask"
+    prune_type = "oneshot_0.995.png"
+    save_path  = os.path.join(model_name, visual_root, prune_type)
     checkpoint_path = os.path.join(model_name, root_path, prun_name)
-    visualize_pruning_heatmap(checkpoint_path)
+    visualize_pruning_heatmap(checkpoint_path,save_path)
