@@ -360,8 +360,7 @@ def analyze_single_layer_regrowth(args):
         else:
             checkpoint_path = f'./{args.m_name}/ckpt_after_prune_oneshot/pruned_oneshot_mask_{args.start_sparsity}.pth'
     else:
-        iteration = int(args.start_sparsity * 10)
-        checkpoint_path = f'./ckpt_after_prune_0.3_epoch_finetune_40/{args.m_name}/pruned_finetuned_mask_0.9903.pth'
+        checkpoint_path = f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_{args.start_sparsity}.pth'
     
     print(f"  Loading from: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path)
@@ -734,7 +733,7 @@ def main():
     parser = argparse.ArgumentParser(description='Single-Layer Regrowth Analysis')
 
     # Model and data
-    parser.add_argument('--m_name', type=str, default='resnet20',
+    parser.add_argument('--m_name', type=str, default='effnet',
                        help='Model name')
     parser.add_argument('--data_dir', type=str, default='./data',
                        help='Data directory')
@@ -742,7 +741,7 @@ def main():
     # Regrowth parameters
     parser.add_argument('--target_sparsity', type=float, default=0.0,
                        help='Target sparsity for reference model AND regrowth target (0.0 = pretrained, 0.95, 0.97, etc.)')
-    parser.add_argument('--start_sparsity', type=float, default=0.98,
+    parser.add_argument('--start_sparsity', type=float, default=0.995,
                        help='Starting sparsity (highly pruned model)')
     parser.add_argument('--starting_checkpoint', type=str, default='oneshot',
                        choices=['oneshot', 'iterative'],

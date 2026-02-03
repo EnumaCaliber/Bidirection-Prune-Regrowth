@@ -1,8 +1,3 @@
-"""
-通用日志/文本转Excel工具
-支持多种格式的表格数据转换
-"""
-
 import re
 import pandas as pd
 from openpyxl import load_workbook
@@ -14,16 +9,6 @@ def parse_text_to_dataframe(text,
                             skip_patterns=None,
                             delimiter=None,
                             auto_detect=True):
-    """
-    将文本数据解析为DataFrame
-
-    参数:
-        text: 输入文本
-        timestamp_pattern: 时间戳的正则表达式模式
-        skip_patterns: 要跳过的行的模式列表
-        delimiter: 列分隔符(None表示自动检测空白符)
-        auto_detect: 是否自动检测表头
-    """
     if skip_patterns is None:
         skip_patterns = []
 
@@ -32,15 +17,13 @@ def parse_text_to_dataframe(text,
     data_rows = []
 
     for line in lines:
-        # 移除时间戳
+
         if timestamp_pattern:
             line = re.sub(timestamp_pattern, '', line).strip()
 
-        # 跳过空行
         if not line:
             continue
 
-        # 跳过匹配指定模式的行
         should_skip = False
         for pattern in skip_patterns:
             if re.search(pattern, line, re.IGNORECASE):
@@ -49,21 +32,17 @@ def parse_text_to_dataframe(text,
         if should_skip:
             continue
 
-        # 分割行
         if delimiter:
             parts = [p.strip() for p in line.split(delimiter)]
         else:
-            # 自动检测：使用空白符分割
             parts = line.split()
 
-        # 如果还没有表头，且这行看起来像表头
         if not headers and auto_detect:
             # 检查是否包含非数字列名
             if any(not is_number(p) for p in parts):
                 headers = parts
                 continue
 
-        # 尝试将数据转换为合适的类型
         processed_parts = []
         for p in parts:
             if is_number(p):
@@ -79,12 +58,10 @@ def parse_text_to_dataframe(text,
 
         data_rows.append(processed_parts)
 
-    # 如果没有检测到表头，创建默认表头
     if not headers and data_rows:
         max_cols = max(len(row) for row in data_rows)
         headers = [f'Column_{i + 1}' for i in range(max_cols)]
 
-    # 确保所有行的列数一致
     max_cols = len(headers)
     for i, row in enumerate(data_rows):
         if len(row) < max_cols:
@@ -92,13 +69,11 @@ def parse_text_to_dataframe(text,
         elif len(row) > max_cols:
             data_rows[i] = row[:max_cols]
 
-    # 创建DataFrame
     df = pd.DataFrame(data_rows, columns=headers)
     return df
 
 
 def is_number(s):
-    """检查字符串是否为数字"""
     try:
         float(s)
         return True
@@ -111,17 +86,6 @@ def create_excel(df, output_path,
                  header_bg_color='4472C4',
                  header_font_color='FFFFFF',
                  freeze_panes=True):
-    """
-    从DataFrame创建格式化的Excel文件
-
-    参数:
-        df: pandas DataFrame
-        output_path: 输出文件路径
-        title: 工作表标题
-        header_bg_color: 表头背景色(十六进制)
-        header_font_color: 表头字体色(十六进制)
-        freeze_panes: 是否冻结首行
-    """
     # 保存为Excel
     df.to_excel(output_path, index=False, sheet_name=title or 'Sheet1')
 
@@ -170,14 +134,6 @@ def create_excel(df, output_path,
 
 
 def text_to_excel(text, output_path, **kwargs):
-    """
-    一步完成：文本转Excel
-
-    参数:
-        text: 输入文本
-        output_path: 输出Excel路径
-        **kwargs: 其他参数传递给parse_text_to_dataframe和create_excel
-    """
     # 分离参数
     parse_params = ['timestamp_pattern', 'skip_patterns', 'delimiter', 'auto_detect']
     excel_params = ['title', 'header_bg_color', 'header_font_color', 'freeze_panes']
@@ -185,7 +141,6 @@ def text_to_excel(text, output_path, **kwargs):
     parse_kwargs = {k: v for k, v in kwargs.items() if k in parse_params}
     excel_kwargs = {k: v for k, v in kwargs.items() if k in excel_params}
 
-    # 解析并创建
     df = parse_text_to_dataframe(text, **parse_kwargs)
     create_excel(df, output_path, **excel_kwargs)
 
@@ -194,55 +149,38 @@ def text_to_excel(text, output_path, **kwargs):
 
 # 使用示例
 if __name__ == '__main__':
-    # 示例1：处理原始数据
-    sample_text = """2026-01-31 14:03:32
+    sample_text = """ 2026-02-01 11:15:25
 Layers sorted by improvement (higher = more beneficial):
-2026-01-31 14:03:32
-         layer_name  ssim_score  final_improvement
-2026-01-31 14:03:32
-     layer3.0.conv2   -0.457737               4.24
-2026-01-31 14:03:32
-     layer3.2.conv1   -0.538324               4.22
-2026-01-31 14:03:32
-     layer3.1.conv1   -0.570038               4.03
-2026-01-31 14:03:32
-     layer3.1.conv2   -0.569057               3.84
-2026-01-31 14:03:32
-     layer3.0.conv1   -0.099905               3.12
-2026-01-31 14:03:32
-     layer2.2.conv2    0.068087               2.67
-2026-01-31 14:03:32
-     layer2.1.conv2    0.474653               2.67
-2026-01-31 14:03:32
-     layer2.1.conv1   -0.080113               2.18
-2026-01-31 14:03:32
-     layer2.0.conv2    0.315279               2.16
-2026-01-31 14:03:32
-     layer2.2.conv1   -0.071820               2.05
-2026-01-31 14:03:32
-     layer3.2.conv2    0.906409               1.94
-2026-01-31 14:03:32
-     layer2.0.conv1    0.724397               1.42
-2026-01-31 14:03:32
-     layer1.2.conv1    0.258307               0.86
-2026-01-31 14:03:32
-     layer1.1.conv1    0.551186               0.70
-2026-01-31 14:03:32
-     layer1.2.conv2    0.147868               0.66
-2026-01-31 14:03:32
-layer3.0.shortcut.0    0.380724               0.45
-2026-01-31 14:03:32
-     layer1.0.conv2    0.484730               0.34
-2026-01-31 14:03:32
-     layer1.1.conv2    0.572650               0.18
-2026-01-31 14:03:32
-             linear    0.500000               0.15
-2026-01-31 14:03:32
-              conv1    0.446107               0.14
-2026-01-31 14:03:32
-layer2.0.shortcut.0    0.124001               0.11
-2026-01-31 14:03:32
-     layer1.0.conv1    0.576959               0.03"""
+2026-02-01 11:15:25
+ layer_name  ssim_score  final_improvement
+2026-02-01 11:15:25
+features.17   -0.510974               0.26
+2026-02-01 11:15:25
+features.20   -0.526358               0.14
+2026-02-01 11:15:25
+features.10    0.847710               0.06
+2026-02-01 11:15:25
+features.14   -0.129671               0.02
+2026-02-01 11:15:25
+features.34    0.500000              -0.07
+2026-02-01 11:15:25
+features.37    0.500000              -0.09
+2026-02-01 11:15:25
+ features.0    0.963572              -0.10
+2026-02-01 11:15:25
+ classifier    0.500000              -0.12
+2026-02-01 11:15:25
+features.30    0.979052              -0.15
+2026-02-01 11:15:25
+features.40    0.500000              -0.16
+2026-02-01 11:15:25
+ features.7    0.967294              -0.21
+2026-02-01 11:15:25
+ features.3    0.961631              -0.24
+2026-02-01 11:15:25
+features.27    0.838445              -0.33
+2026-02-01 11:15:25
+features.24   -0.777554              -0.44"""
 
     df = text_to_excel(
         sample_text,
@@ -251,6 +189,4 @@ layer2.0.shortcut.0    0.124001               0.11
         title='Layer Analysis'
     )
 
-    print(f"✓ 已创建 Excel 文件")
-    print(f"✓ 共 {len(df)} 行, {len(df.columns)} 列")
-    print(f"✓ 列名: {', '.join(df.columns)}")
+
