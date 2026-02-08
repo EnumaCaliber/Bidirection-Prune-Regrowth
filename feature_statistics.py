@@ -9,19 +9,23 @@ from utils.model_loader import model_loader
 MODELS = {
     "vgg16": {
         "pretrained": "vgg16/checkpoint/pretrain_vgg16_ckpt.pth",
-        "pruned": "vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-oneshot": "vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-iterative": "vgg16/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9953.pth",
     },
     "resnet20": {
         "pretrained": "resnet20/checkpoint/pretrain_resnet20_ckpt.pth",
-        "pruned": "resnet20/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-oneshot": "resnet20/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-iterative":"resnet20/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9862.pth",
     },
     "densenet": {
         "pretrained": "densenet/checkpoint/pretrain_densenet_ckpt.pth",
-        "pruned": "densenet/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-oneshot": "densenet/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-iterative": "densenet/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9953.pth",
     },
     "effnet": {
         "pretrained": "effnet/checkpoint/pretrain_effnet_ckpt.pth",
-        "pruned": "effnet/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-oneshot": "effnet/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth",
+        "pruned-iterative": "effnet/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9953.pth",
     },
 }
 IMG_IDX = 0
@@ -94,9 +98,9 @@ def run_model(model_name, ckpt_path, tag, img, device):
     save_dir = os.path.join(OUT_BASE, model_name, tag)
     os.makedirs(save_dir, exist_ok=True)
 
-    if tag == "pruned":
+    if tag == "pruned-oneshot" or tag == "pruned-iterative":
         model = load_pruned(ckpt_path, device, model_name)
-    else:
+    elif tag == "pretrained":
         model = load_pretrained(ckpt_path, device, model_name)
 
     storage, order = {}, []
