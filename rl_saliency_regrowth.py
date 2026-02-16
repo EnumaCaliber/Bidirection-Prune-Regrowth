@@ -30,7 +30,7 @@ from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 from utils.analysis_utils import (
     BlockwiseFeatureExtractor, compute_block_ssim,
-    load_model, prune_weights_reparam, count_pruned_params,
+    load_model, load_model_name, prune_weights_reparam, count_pruned_params,
     get_cifar_resnet20_blocks
 )
 
@@ -41,7 +41,7 @@ run = wandb.init(
     config={
         "learning_rate": 5e-3,
         "architecture": "VGG16",
-        "regrow_step": 0.02,
+        "regrow_step": 0.005,
         "epochs": 500,
     },
 )
@@ -681,7 +681,8 @@ class RegrowthPolicyGradient:
         self.mini_finetune(model_copy, epochs=50)
         
         # Evaluate
-        accuracy = self.evaluate_model(model_copy, full_eval=False)
+        # may change and see how to happen
+        accuracy = self.evaluate_model(model_copy, full_eval=True)
         sparsity, _, _ = self.calculate_sparsity(model_copy)
         
         # Compute reward
@@ -937,19 +938,20 @@ def main():
     # RL hyperparameters
     parser.add_argument('--num_epochs', type=int, default=50)
     parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--learning_rate', type=float, default=3e-4)
+    # ORIGINAL 3E-4
+    parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--hidden_size', type=int, default=64)
     parser.add_argument('--entropy_coef', type=float, default=0.5)
     parser.add_argument('--reward_temperature', type=float, default=0.005)
     parser.add_argument('--start_beta', type=float, default=0.40)
     parser.add_argument('--end_beta', type=float, default=0.04)
     parser.add_argument('--decay_fraction', type=float, default=0.4)
-    
+
     # Action space
     parser.add_argument('--action_space_size', type=int, default=11)
     
     # Regrowth parameters
-    parser.add_argument('--regrow_step', type=float, default=0.01)
+    parser.add_argument('--regrow_step', type=float, default=0.0021)
     parser.add_argument('--init_strategy', type=str, default='zero',
                        choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)
@@ -978,7 +980,7 @@ def main():
     # Load models
     print("Loading models...")
     model_pretrained = model_loader(args.m_name, device)
-    load_model(model_pretrained, f'./{args.m_name}/checkpoint')
+    load_model_name(model_pretrained, f'./{args.m_name}/checkpoint', args.m_name)
     
     model_99 = model_loader(args.m_name, device)
     prune_weights_reparam(model_99)
@@ -990,9 +992,13 @@ def main():
                         "layer3.0.conv2", "layer3.0.conv1", "layer3.1.conv1", "layer3.1.conv2"]
     elif args.m_name == 'vgg16':
         # checkpoint_99 = torch.load(f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_0.995.pth')
-        checkpoint_99 = torch.load(f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_0.99_repeat2_patience30.pth')
-        target_layers = ["features.14", "features.10", "features.17", "features.7", "features.24",
-                        "features.20", "features.0", "features.27", "features.3", "classifier"]
+        # checkpoint_99 = torch.load(f'./{args.m_name}/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth')
+        checkpoint_99 = torch.load(
+            f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9953.pth')
+        # target_layers = ["features.14", "features.10", "features.17", "features.7", "features.24",
+        #                 "features.20", "features.0", "features.27", "features.3", "classifier"]
+        # target_layers = ["features.10", "features.14", "features.17", "features.20", "features.24", "features.27"]
+        target_layers = ["features.10", "features.20", "features.24"]
     elif args.m_name == 'alexnet':
         checkpoint_99 = torch.load(f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_0.99.pth')
         target_layers = ['features.3', 'features.6', 'features.8', 'features.10', 'classifier.1']
@@ -1100,7 +1106,7 @@ def main():
         epochs=args.finetune_epochs,
         lr=args.finetune_lr,
         save_path=final_save_path,
-        patience=100
+        patience=200
     )
     
     print(f"\n{'='*70}")

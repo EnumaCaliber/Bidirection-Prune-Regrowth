@@ -34,7 +34,7 @@ from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 from utils.analysis_utils import (
     BlockwiseFeatureExtractor, compute_block_ssim,
-    load_model, prune_weights_reparam, count_pruned_params,
+    load_model, load_model_name, prune_weights_reparam, count_pruned_params,
     get_cifar_resnet20_blocks
 )
 
@@ -54,6 +54,7 @@ run = wandb.init(
     },
 )
 
+
 def set_seed(seed=42):
     """
     Set random seed for reproducibility across all libraries
@@ -63,17 +64,17 @@ def set_seed(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)  # for multi-GPU
-    
+
     # Make PyTorch deterministic (may impact performance slightly)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    
+
     # For DataLoader workers
     def seed_worker(worker_id):
-        worker_seed = torch.initial_seed() % 2**32
+        worker_seed = torch.initial_seed() % 2 ** 32
         np.random.seed(worker_seed)
         random.seed(worker_seed)
-    
+
     return seed_worker
 
 
@@ -83,6 +84,7 @@ class RegrowthAgent(nn.Module):
     
     Outputs action logits for each layer sequentially.
     """
+
     def __init__(self, action_dim, hidden_size, num_layers, context_dim, device='cuda'):
         super(RegrowthAgent, self).__init__()
         self.DEVICE = device
@@ -91,16 +93,16 @@ class RegrowthAgent(nn.Module):
         self.action_dim = action_dim
         self.context_dim = context_dim
         self.input_dim = action_dim + context_dim
-        
+
         # LSTM cell for sequential decision making
         self.lstm = nn.LSTMCell(self.input_dim, hidden_size)
-        
+
         # Decoder: hidden state -> action logits
         # Output size = number of discrete actions (ratios)
         self.decoder = nn.Linear(hidden_size, action_dim)
-        
+
         self.hidden = self.init_hidden()
-    
+
     def forward(self, prev_logits, context_vec):
         """
         Single-step forward pass.
@@ -122,12 +124,13 @@ class RegrowthAgent(nn.Module):
         self.hidden = (h_t, c_t)
         logits = self.decoder(h_t)
         return logits
-    
+
     def init_hidden(self):
         """Initialize hidden state for LSTM"""
         h_t = torch.zeros(1, self.nhid, dtype=torch.float, device=self.DEVICE)
         c_t = torch.zeros(1, self.nhid, dtype=torch.float, device=self.DEVICE)
         return (h_t, c_t)
+
 
 class RegrowthPolicyGradient:
     """
@@ -138,7 +141,8 @@ class RegrowthPolicyGradient:
     2. Apply allocation -> finetune -> evaluate -> get reward
     3. Update agent with policy gradient + entropy bonus
     """
-    def __init__(self, config, model_pretrained, model_95, model_99, 
+
+    def __init__(self, config, model_pretrained, model_95, model_99,
                  target_layers, train_loader, test_loader, device):
         # Training hyperparameters
         self.NUM_EPOCHS = config['num_epochs']
@@ -147,13 +151,13 @@ class RegrowthPolicyGradient:
         self.HIDDEN_SIZE = config['hidden_size']
         self.BETA = config['entropy_coef']  # Entropy bonus coefficient
         self.REWARD_TEMPERATURE = config.get('reward_temperature', 0.01)
-        
+
         self.DEVICE = device
         self.ACTION_SPACE = config['action_space_size']  # Number of discrete ratios
         self.NUM_STEPS = len(target_layers)  # Number of layers to allocate
         self.CONTEXT_DIM = config.get('context_dim', 3)
         self.BASELINE_DECAY = config.get('baseline_decay', 0.9)
-        
+
         # Models and data
         self.model_pretrained = model_pretrained.to(device)
         self.model_95 = model_95.to(device)
@@ -161,19 +165,19 @@ class RegrowthPolicyGradient:
         self.target_layers = target_layers
         self.train_loader = train_loader
         self.test_loader = test_loader
-        
+
         # Reference model for priority-based regrowth (can be custom or default to model_95)
         self.model_reference = config.get('model_reference', model_95).to(device)
-        
+
         # Target regrowth budget
         self.target_regrow = config['target_regrow']
         self.layer_capacities = config['layer_capacities']
         self.total_capacity = max(sum(self.layer_capacities), 1)
-        
+
         # Reference for regrowth
         self.reference_masks = config['reference_masks']
         self.reference_weights = config['reference_weights']
-        
+
         # Controller (LSTM-based)
         self.agent = RegrowthAgent(
             action_dim=self.ACTION_SPACE,
@@ -182,57 +186,57 @@ class RegrowthPolicyGradient:
             context_dim=self.CONTEXT_DIM,
             device=self.DEVICE
         ).to(self.DEVICE)
-        
+
         # Reward baseline for variance reduction
         self.reward_baseline = None
-        
+
         # Optimizer
         self.adam = optim.Adam(params=self.agent.parameters(), lr=self.ALPHA)
-        
+
         # Statistics
         self.total_rewards = deque([], maxlen=100)
-        
+
         # Setup feature extractors for SSIM
         self.block_dict = {'target_block': target_layers}
-        
+
         # Store model name for safe copying
         self._model_name = config.get('model_name')
-        
+
         # Checkpoint settings
         self.checkpoint_dir = config.get('checkpoint_dir', './rl_nas_checkpoints')
         self.save_freq = config.get('save_freq', 5)  # Save every N epochs
-        
+
         # Track best model within current checkpoint window
         self.window_best_reward = float('-inf')
         self.window_best_allocation = None
         self.window_best_regrow_indices = None
         self.window_best_epoch = 0
-        
+
         # Entropy schedule settings
         self.use_entropy_schedule = config.get('use_entropy_schedule', True)
         self.start_beta = config.get('start_beta', 0.4)
         self.end_beta = config.get('end_beta', 0.004)
         self.decay_fraction = config.get('decay_fraction', 0.4)  # Decay over 80% of training
-        
+
         # Compute layer priority ONCE at initialization (based on SSIM scores)
         # Lower SSIM = more dissimilar features = higher priority for regrowth
         print("\nComputing layer priority based on SSIM scores (one-time computation)...")
         ssim_scores = self.compute_layer_ssim_scores(self.model_99)
-        
+
         # Create priority-sorted list of (layer_name, original_idx, ssim_val)
         self.layer_priority = []
         for idx, layer_name in enumerate(self.target_layers):
             ssim_val = ssim_scores.get(layer_name, 0.5)
             self.layer_priority.append((layer_name, idx, ssim_val))
-        
+
         # Sort by SSIM (ascending) - lower SSIM = higher priority
         self.layer_priority.sort(key=lambda x: x[2])
-        
+
         print(f"Layer regrowth priority (by SSIM, lower = higher priority):")
         for layer_name, orig_idx, ssim_val in self.layer_priority:
             capacity = int(self.layer_capacities[orig_idx])
             print(f"  {layer_name}: SSIM={ssim_val:.4f}, capacity={capacity} weights")
-    
+
     def get_entropy_coef(self, epoch):
         """
         Get entropy coefficient for current epoch using decay schedule.
@@ -246,30 +250,30 @@ class RegrowthPolicyGradient:
         if not self.use_entropy_schedule:
             # Use fixed entropy coefficient
             return self.BETA
-        
+
         # Decay over specified fraction of total epochs
         decay_epochs = self.NUM_EPOCHS * self.decay_fraction
-        
+
         if epoch < decay_epochs:
             # Linear decay from start_beta to end_beta
             beta = self.start_beta - (self.start_beta - self.end_beta) * (epoch / decay_epochs)
         else:
             # Keep at end_beta for remaining epochs
             beta = self.end_beta
-        
+
         return beta
-    
+
     def _create_model_copy(self, source_model):
         """
         Create a proper copy of a pruned model.
         deepcopy doesn't work well with pruning hooks, so we recreate and load state dict.
         """
-        
+
         new_model = model_loader(self._model_name, self.DEVICE)
         prune_weights_reparam(new_model)
         new_model.load_state_dict(source_model.state_dict())
         return new_model
-    
+
     def compute_layer_ssim_scores(self, model_current):
         """
         Compute SSIM scores for each target layer between current model and pretrained model.
@@ -284,7 +288,7 @@ class RegrowthPolicyGradient:
         # Extract features from both models
         extractor_pretrained = BlockwiseFeatureExtractor(self.model_pretrained, self.block_dict)
         extractor_current = BlockwiseFeatureExtractor(model_current, self.block_dict)
-        
+
         # Extract features using the extract_block_features method
         # Use 128 batches from test_loader for SSIM computation
         with torch.no_grad():
@@ -293,12 +297,12 @@ class RegrowthPolicyGradient:
 
         # Compute SSIM scores per layer
         ssim_scores = compute_block_ssim(features_pretrained, features_current)
-        
+
         # Map SSIM scores to layer names
         # ssim_scores has structure: {'target_block': {'layer_name': score, ...}}
         ssim_dict = {}
         target_block_scores = ssim_scores.get('target_block', {})
-        
+
         for layer_name in self.target_layers:
             if layer_name in target_block_scores:
                 ssim_dict[layer_name] = target_block_scores[layer_name]
@@ -306,14 +310,14 @@ class RegrowthPolicyGradient:
                 # If SSIM not available, assign neutral score
                 print(f"Warning: SSIM not computed for {layer_name}, using default 0.5")
                 ssim_dict[layer_name] = 0.5
-        
+
         return ssim_dict
-    
+
     def _save_checkpoint(self, epoch, best_reward, best_allocation, best_regrow_indices):
         """Save training checkpoint and best model within this checkpoint window"""
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        checkpoint_path = os.path.join(self.checkpoint_dir, f'rl_training_checkpoint_epoch_{epoch+1}.pth')
-        
+        checkpoint_path = os.path.join(self.checkpoint_dir, f'rl_training_checkpoint_epoch_{epoch + 1}.pth')
+
         checkpoint = {
             'epoch': epoch,
             'agent_state_dict': self.agent.state_dict(),
@@ -333,17 +337,17 @@ class RegrowthPolicyGradient:
                 'num_steps': self.NUM_STEPS,
             }
         }
-        
+
         torch.save(checkpoint, checkpoint_path)
         print(f"  ✓ Checkpoint saved: {checkpoint_path}")
-        
+
         # Save the best model within this checkpoint window
         if self.window_best_allocation is not None:
             window_best_path = os.path.join(
-                self.checkpoint_dir, 
-                f'window_best_epoch_{epoch+1}_{self._model_name}.pth'
+                self.checkpoint_dir,
+                f'window_best_epoch_{epoch + 1}_{self._model_name}.pth'
             )
-            
+
             window_best_data = {
                 'window_end_epoch': epoch,
                 'window_best_epoch': self.window_best_epoch,
@@ -353,17 +357,17 @@ class RegrowthPolicyGradient:
                 'regrow_indices': self.window_best_regrow_indices,
                 'timestamp': time.time(),
             }
-            
+
             torch.save(window_best_data, window_best_path)
             print(f"  ✓ Window best model saved: {window_best_path}")
-            print(f"     Window best: Epoch {self.window_best_epoch+1}, Reward: {self.window_best_reward:.4f} ({self.window_best_reward*100:.2f}%)")
-        
-    
+            print(
+                f"     Window best: Epoch {self.window_best_epoch + 1}, Reward: {self.window_best_reward:.4f} ({self.window_best_reward * 100:.2f}%)")
+
     def _save_best_allocation(self, epoch, best_reward, best_allocation, best_regrow_indices):
         """Save best allocation found so far (overwrites previous best)"""
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         best_path = os.path.join(self.checkpoint_dir, f'best_allocation_{self._model_name}.pth')
-        
+
         best_data = {
             'epoch': epoch,
             'reward': best_reward,
@@ -372,11 +376,12 @@ class RegrowthPolicyGradient:
             'regrow_indices': best_regrow_indices,
             'timestamp': time.time(),
         }
-        
+
         torch.save(best_data, best_path)
-        print(f"  ✓ New best allocation saved! Reward: {best_reward:.4f} ({best_reward*100:.2f}%) at epoch {epoch+1}")
+        print(
+            f"  ✓ New best allocation saved! Reward: {best_reward:.4f} ({best_reward * 100:.2f}%) at epoch {epoch + 1}")
         print(f"     Saved to: {best_path}")
-    
+
     def solve_environment(self, resume_from=None):
         """
         Main training loop (following nas_rl/policy_gradient.py::solve_environment)
@@ -384,9 +389,9 @@ class RegrowthPolicyGradient:
         Args:
             resume_from: Path to checkpoint file to resume from (optional)
         """
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print("RL Policy Gradient Training (NAS-RL Style)")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
         print(f"Configuration:")
         print(f"  Epochs: {self.NUM_EPOCHS}")
         print(f"  Batch size: {self.BATCH_SIZE}")
@@ -398,13 +403,13 @@ class RegrowthPolicyGradient:
         print(f"  Num layers: {self.NUM_STEPS}")
         print(f"  Checkpoint dir: {self.checkpoint_dir}")
         print(f"  Save frequency: Every {self.save_freq} epochs")
-        print(f"{'='*70}\n")
-        
+        print(f"{'=' * 70}\n")
+
         best_reward = float('-inf')
         best_allocation = None
         best_regrow_indices = None
         start_epoch = 0
-        
+
         # Resume from checkpoint if provided
         if resume_from and os.path.exists(resume_from):
             print(f"Resuming from checkpoint: {resume_from}")
@@ -420,49 +425,49 @@ class RegrowthPolicyGradient:
             if 'total_rewards' in checkpoint:
                 self.total_rewards = deque(checkpoint['total_rewards'], maxlen=100)
             print(f"  Resumed from epoch {start_epoch}")
-            print(f"  Best reward so far: {best_reward:.4f} ({best_reward*100:.2f}%)")
+            print(f"  Best reward so far: {best_reward:.4f} ({best_reward * 100:.2f}%)")
             print()
-            
+
             # Reset window tracking when resuming (start fresh window)
             self.window_best_reward = float('-inf')
             self.window_best_allocation = None
             self.window_best_regrow_indices = None
             self.window_best_epoch = start_epoch
-        
+
         epoch = start_epoch
         while epoch < self.NUM_EPOCHS:
             # Epoch-level accumulators
             # epoch_logits = torch.empty(size=(0, self.ACTION_SPACE), device=self.DEVICE)
             # epoch_weighted_log_probs = torch.empty(size=(0,), dtype=torch.float, device=self.DEVICE)
-            
+
             # # Sample BATCH_SIZE allocations
             # epoch_allocations = []
             # for i in range(self.BATCH_SIZE):
-                # Play one episode (sample allocation, evaluate, get reward)
-            (episode_weighted_log_prob, 
-                episode_logits, 
-                reward,
-                allocation,
-                sparsity,
-                regrow_indices) = self.play_episode()
-            
+            # Play one episode (sample allocation, evaluate, get reward)
+            (episode_weighted_log_prob,
+             episode_logits,
+             reward,
+             allocation,
+             sparsity,
+             regrow_indices) = self.play_episode()
+
             # Track rewards
             # self.total_rewards.append(reward)
             # epoch_allocations.append((reward, allocation, sparsity))
-            
+
             # # Accumulate weighted log probs
             # epoch_weighted_log_probs = torch.cat((epoch_weighted_log_probs, episode_weighted_log_prob), dim=0)
-            
+
             # # Accumulate logits for entropy calculation
             # if episode_logits is not None:
             #     epoch_logits = torch.cat((epoch_logits, episode_logits), dim=0)
-            
+
             # Track best
             if reward > best_reward:
                 best_reward = reward
                 best_allocation = allocation
                 best_regrow_indices = copy.deepcopy(regrow_indices)
-                
+
                 # Save global best allocation immediately when found
                 self._save_best_allocation(
                     epoch=epoch,
@@ -470,13 +475,14 @@ class RegrowthPolicyGradient:
                     best_allocation=best_allocation,
                     best_regrow_indices=best_regrow_indices
                 )
-            
+
             # Track best within current checkpoint window
             if reward > self.window_best_reward:
                 self.window_best_reward = reward
                 self.window_best_allocation = copy.deepcopy(allocation)
                 self.window_best_regrow_indices = copy.deepcopy(regrow_indices)
-            print(f"\n  Controller update (epoch {epoch+1}): acc={reward*100:.2f}% | baseline={self.reward_baseline*100:.2f}%")
+            print(
+                f"\n  Controller update (epoch {epoch + 1}): acc={reward * 100:.2f}% | baseline={self.reward_baseline * 100:.2f}%")
 
             current_beta = self.get_entropy_coef(epoch)
 
@@ -503,10 +509,10 @@ class RegrowthPolicyGradient:
 
             # Log allocation for current episode
             if epoch % 1 == 0 or epoch == 0:
-                print(f"\n  Allocation from epoch {epoch+1}:")
+                print(f"\n  Allocation from epoch {epoch + 1}:")
                 total_alloc = sum(allocation.values()) if allocation else 0
                 # reward is normalized to [0,1], multiply by 100 for percentage display
-                print(f"    Reward: {reward*100:.2f}%, Sparsity: {sparsity:.2f}%, Total allocated: {total_alloc}")
+                print(f"    Reward: {reward * 100:.2f}%, Sparsity: {sparsity:.2f}%, Total allocated: {total_alloc}")
                 if allocation:
                     print(f"    Layer allocations (count / capacity):")
                     for layer_name, count in allocation.items():
@@ -514,17 +520,17 @@ class RegrowthPolicyGradient:
                         capacity = self.layer_capacities[layer_idx]
                         print(f"      {layer_name}: {count:4d} / {capacity:4d}")
                 print()
-            
+
             # Get current beta for display
             display_beta = self.get_entropy_coef(epoch)
-            
-            print(f"Epoch {epoch+1:3d}/{self.NUM_EPOCHS} | "
-                f"Current Reward: {reward:.4f} | "
-                f"Best Reward: {best_reward:.4f} | "
-                f"Entropy: {entropy:.4f} | "
-                f"Loss: {loss.item():.4f} | "
-                f"Beta: {display_beta:.4f}")
-            
+
+            print(f"Epoch {epoch + 1:3d}/{self.NUM_EPOCHS} | "
+                  f"Current Reward: {reward:.4f} | "
+                  f"Best Reward: {best_reward:.4f} | "
+                  f"Entropy: {entropy:.4f} | "
+                  f"Loss: {loss.item():.4f} | "
+                  f"Beta: {display_beta:.4f}")
+
             # Save checkpoint periodically
             if (epoch + 1) % self.save_freq == 0:
                 self._save_checkpoint(
@@ -533,23 +539,23 @@ class RegrowthPolicyGradient:
                     best_allocation=best_allocation,
                     best_regrow_indices=best_regrow_indices
                 )
-                
+
                 # Reset window tracking for next checkpoint period
                 self.window_best_reward = float('-inf')
                 self.window_best_allocation = None
                 self.window_best_regrow_indices = None
                 self.window_best_epoch = epoch + 1  # Start of next window
-            
+
             epoch += 1
-        
-        print(f"\n{'='*70}")
+
+        print(f"\n{'=' * 70}")
         print(f"Training Completed!")
-        print(f"Best Reward: {best_reward:.4f} (accuracy: {best_reward*100:.2f}%)")
+        print(f"Best Reward: {best_reward:.4f} (accuracy: {best_reward * 100:.2f}%)")
         print(f"Best Allocation: {best_allocation}")
-        print(f"{'='*70}\n")
-        
+        print(f"{'=' * 70}\n")
+
         return best_allocation, best_reward, best_regrow_indices
-    
+
     def play_episode(self):
         """
         Play one episode: sample allocation -> evaluate -> compute reward
@@ -565,13 +571,13 @@ class RegrowthPolicyGradient:
         """
         # Reset LSTM hidden state at the start of every episode (avoid leaking across episodes)
         self.agent.hidden = self.agent.init_hidden()
-        
+
         # Use pre-computed layer priority (computed once at initialization)
         # No need to recompute SSIM every episode - the priority is fixed based on initial degradation
-        
+
         # Previous logits start at zero
         prev_logits = torch.zeros(1, self.ACTION_SPACE, device=self.DEVICE)
-        
+
         # Sample actions for each layer using Categorical distribution
         # NOW iterate through layers in SSIM-PRIORITY order
         max_ratio = 1.0
@@ -643,12 +649,12 @@ class RegrowthPolicyGradient:
         # allocation = {
         #     layer_name: count for layer_name, count in allocation.items() if count > 0
         # }
-        
+
         # Apply allocation and evaluate  
         # Use proper model copying to avoid deepcopy issues with pruning hooks
         model_copy = self._create_model_copy(self.model_99)
         model_copy.eval()
-        
+
         # # Log allocation amounts (allocation is already in SSIM-priority order)
         # print(f"\n  Allocation amounts:")
         # for layer_name in priority_layer_names:
@@ -657,7 +663,7 @@ class RegrowthPolicyGradient:
         #         orig_idx = next(i for i, (ln, _, _) in enumerate(self.layer_priority) if ln == layer_name)
         #         ssim_val = self.layer_priority[orig_idx][2]
         #         print(f"    {layer_name}: regrow={num_weights} weights (SSIM={ssim_val:.4f})")
-        
+
         # Apply regrowth (allocation is already in SSIM-priority order from the sampling loop)
         actual_regrown = {}
         regrow_indices = {}
@@ -682,14 +688,14 @@ class RegrowthPolicyGradient:
 
         # Evaluate accuracy
         accuracy = self.evaluate_model(model_copy, full_eval=False)
-        
+
         # Calculate sparsity after regrowth
         sparsity, total_params, pruned_params = self.calculate_sparsity(model_copy)
-        
+
         # Compute reward - normalize accuracy to [0, 1] range to match entropy scale
         # Typical CIFAR accuracy range: 70-90%, normalize to roughly [0, 1]
         reward = accuracy / 100.0  # Convert percentage to [0, 1] range
-        
+
         # Weighted log probabilities (following nas_rl)
         # Update running reward baseline and compute advantage
         if self.reward_baseline is None:
@@ -699,10 +705,10 @@ class RegrowthPolicyGradient:
         centered_reward = reward - baseline
         normalized_advantage = centered_reward / temperature
         normalized_advantage = float(np.clip(normalized_advantage, -100.0, 100.0))
-     
+
         # Track policy gradient magnitude (useful for detecting convergence)
         pg_magnitude = torch.mean(torch.abs(episode_log_probs)).item()
-        
+
         # Log comprehensive metrics for convergence analysis
         run.log({
             # Raw metrics
@@ -722,8 +728,8 @@ class RegrowthPolicyGradient:
         episode_weighted_log_probs = episode_log_probs * advantage_tensor  # [num_layers]
         sum_weighted_log_probs = torch.sum(episode_weighted_log_probs).unsqueeze(dim=0)  # [1]
 
-        episode_logits = torch.stack(masked_logits_list) if masked_logits_list else None 
-        
+        episode_logits = torch.stack(masked_logits_list) if masked_logits_list else None
+
         return sum_weighted_log_probs, episode_logits, reward, allocation, sparsity, regrow_indices
 
     def calculate_loss(self, epoch_logits, weighted_log_probs, beta=None):
@@ -741,7 +747,7 @@ class RegrowthPolicyGradient:
         """
         if beta is None:
             beta = self.BETA
-            
+
         policy_loss = -torch.mean(weighted_log_probs)
 
         if epoch_logits.numel() == 0:
@@ -753,7 +759,7 @@ class RegrowthPolicyGradient:
 
         entropy_bonus = -beta * entropy
         return policy_loss + entropy_bonus, entropy
-    
+
     def apply_allocation(self, model, allocation, regrow_indices=None):
         """Apply regrowth allocation to model"""
         regrow_indices = regrow_indices or {}
@@ -768,7 +774,7 @@ class RegrowthPolicyGradient:
                     num_weights,
                     selected_indices=selected_idx
                 )
-    
+
     def apply_random_regrowth(self, model, layer_name, num_weights, selected_indices=None):
         """
         Intelligently regrow weights in specified layer with priority-based selection.
@@ -786,18 +792,19 @@ class RegrowthPolicyGradient:
         module = module_dict.get(layer_name)
         if module is None or not hasattr(module, 'weight_mask'):
             return 0, None
-        
+
         current_mask = module.weight_mask
         ref_mask = self.reference_masks[layer_name]
-        
+
         # Get reference mask from specified reference model (defaults to model_95 if not provided)
         module_reference = dict(self.model_reference.named_modules())[layer_name]
-        reference_mask = module_reference.weight_mask if hasattr(module_reference, 'weight_mask') else torch.ones_like(ref_mask)
-        
+        reference_mask = module_reference.weight_mask if hasattr(module_reference, 'weight_mask') else torch.ones_like(
+            ref_mask)
+
         # Total regrowable positions: currently pruned (0) but were present in target reference (1)
         regrowable = (current_mask == 0) & (ref_mask == 1)
         regrowable_indices = torch.nonzero(regrowable, as_tuple=False)
-        
+
         if len(regrowable_indices) == 0:
             empty_shape = (0, regrowable_indices.size(1) if regrowable_indices.ndim > 1 else 1)
             return 0, torch.empty(empty_shape, dtype=torch.long).cpu()
@@ -824,7 +831,7 @@ class RegrowthPolicyGradient:
 
             selected_indices_tensor = torch.stack(filtered).to(regrowable_indices.device)
             actual_regrow = selected_indices_tensor.size(0)
-        
+
         # PRIORITY-BASED SELECTION MODE: Prioritize reference model weights
         else:
             # Separate regrowable indices into two groups:
@@ -832,34 +839,36 @@ class RegrowthPolicyGradient:
             # Group B: Weights that were PRUNED (mask=0) in reference model (low priority)
             priority_indices = []
             random_indices = []
-            
+
             for idx in regrowable_indices:
                 tuple_idx = tuple(idx.tolist())
                 if reference_mask[tuple_idx].item() > 0.5:  # Was kept in reference (important)
                     priority_indices.append(idx)
                 else:  # Was pruned in reference (less important)
                     random_indices.append(idx)
-            
+
             # Convert to tensors
             if len(priority_indices) > 0:
                 priority_tensor = torch.stack(priority_indices)
             else:
-                priority_tensor = torch.empty((0, regrowable_indices.size(1)), dtype=torch.long, device=regrowable_indices.device)
-            
+                priority_tensor = torch.empty((0, regrowable_indices.size(1)), dtype=torch.long,
+                                              device=regrowable_indices.device)
+
             if len(random_indices) > 0:
                 random_tensor = torch.stack(random_indices)
             else:
-                random_tensor = torch.empty((0, regrowable_indices.size(1)), dtype=torch.long, device=regrowable_indices.device)
-            
+                random_tensor = torch.empty((0, regrowable_indices.size(1)), dtype=torch.long,
+                                            device=regrowable_indices.device)
+
             # Build selection strategy:
             # 1. First, take as many priority weights as possible (up to num_weights)
             # 2. If budget remains, randomly sample from remaining pool
-            
+
             num_priority = min(len(priority_tensor), num_weights)
             num_random = max(0, min(num_weights - num_priority, len(random_tensor)))
-            
+
             selected_list = []
-            
+
             # Select from priority group (sample if more available than budget)
             if num_priority > 0:
                 if len(priority_tensor) <= num_priority:
@@ -869,19 +878,19 @@ class RegrowthPolicyGradient:
                     # Randomly sample from priority weights
                     perm = torch.randperm(len(priority_tensor), device=regrowable_indices.device)[:num_priority]
                     selected_list.append(priority_tensor[perm])
-            
+
             # Fill remaining budget from random group
             if num_random > 0:
                 perm = torch.randperm(len(random_tensor), device=regrowable_indices.device)[:num_random]
                 selected_list.append(random_tensor[perm])
-            
+
             # Combine selections
             if len(selected_list) > 0:
                 selected_indices_tensor = torch.cat(selected_list, dim=0)
                 actual_regrow = selected_indices_tensor.size(0)
             else:
                 return 0, torch.empty((0, regrowable_indices.size(1)), dtype=torch.long).cpu()
-        
+
         # Apply regrowth - update mask AND copy weight from reference
         for idx in selected_indices_tensor:
             tuple_idx = tuple(idx.tolist())
@@ -895,9 +904,9 @@ class RegrowthPolicyGradient:
                     module.weight_orig.data[tuple_idx] = ref_weight.clone()
                 else:
                     module.weight.data[tuple_idx] = ref_weight.clone()
-        
+
         return actual_regrow, selected_indices_tensor.detach().cpu()
-    
+
     def calculate_sparsity(self, model):
         """
         Calculate current sparsity of the model
@@ -909,17 +918,16 @@ class RegrowthPolicyGradient:
         """
         total_params = 0
         pruned_params = 0
-        
+
         for name, module in model.named_modules():
             if hasattr(module, 'weight_mask'):
                 mask = module.weight_mask
                 total_params += mask.numel()
                 pruned_params += (mask == 0).sum().item()
-        
+
         sparsity = 100.0 * pruned_params / total_params if total_params > 0 else 0.0
         return sparsity, total_params, pruned_params
 
-    
     def mini_finetune(self, model, epochs=10, lr=0.0003):
         """Short finetuning pass for the regrown model before evaluation.    
         Uses AdamW optimizer (critical for sparse networks after regrowth).
@@ -929,7 +937,7 @@ class RegrowthPolicyGradient:
         model.train()
         optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
         criterion = nn.CrossEntropyLoss()
-        
+
         best_accuracy = 0.0
         best_model_state = None
 
@@ -942,7 +950,7 @@ class RegrowthPolicyGradient:
                 loss = criterion(outputs, targets)
                 loss.backward()
                 optimizer.step()
-            
+
             # Quick evaluation to track best model
             model.eval()
             correct = 0
@@ -954,22 +962,22 @@ class RegrowthPolicyGradient:
                     _, predicted = outputs.max(1)
                     total += targets.size(0)
                     correct += predicted.eq(targets).sum().item()
-            
+
             accuracy = 100.0 * correct / total
-            
+
             # Track best model
             if accuracy > best_accuracy:
                 best_accuracy = accuracy
                 best_model_state = copy.deepcopy(model.state_dict())
-            
+
             model.train()
-        
+
         # Restore best model
         if best_model_state is not None:
             model.load_state_dict(best_model_state)
-        
+
         model.eval()
-    
+
     def evaluate_model(self, model, full_eval=False):
         """Evaluate model accuracy
         
@@ -980,7 +988,7 @@ class RegrowthPolicyGradient:
         model.eval()
         correct = 0
         total = 0
-        
+
         # Ensure deterministic evaluation
         with torch.no_grad():
             torch.cuda.empty_cache()  # Clear cache for consistent GPU memory state
@@ -992,7 +1000,7 @@ class RegrowthPolicyGradient:
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
                 correct += predicted.eq(targets).sum().item()
-        
+
         accuracy = 100.0 * correct / total
         return accuracy
 
@@ -1008,13 +1016,13 @@ def calculate_model_sparsity(model):
     """
     total_params = 0
     pruned_params = 0
-    
+
     for name, module in model.named_modules():
         if hasattr(module, 'weight_mask'):
             mask = module.weight_mask
             total_params += mask.numel()
             pruned_params += (mask == 0).sum().item()
-    
+
     sparsity = 100.0 * pruned_params / total_params if total_params > 0 else 0.0
     return sparsity, total_params, pruned_params
 
@@ -1035,7 +1043,7 @@ def evaluate_model_accuracy(model, test_loader, device, full_eval=True):
     model.eval()
     correct = 0
     total = 0
-    
+
     with torch.no_grad():
         torch.cuda.empty_cache()
         for batch_idx, (inputs, targets) in enumerate(test_loader):
@@ -1046,12 +1054,12 @@ def evaluate_model_accuracy(model, test_loader, device, full_eval=True):
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
-    
+
     accuracy = 100.0 * correct / total
     return accuracy
 
 
-def full_finetune(model, train_loader, test_loader, device, 
+def full_finetune(model, train_loader, test_loader, device,
                   epochs=2000, lr=0.0003, save_path=None, verbose=True, patience=100):
     """
     Complete finetuning process with best model tracking and early stopping
@@ -1074,9 +1082,9 @@ def full_finetune(model, train_loader, test_loader, device,
         best_accuracy: Best test accuracy achieved
         best_model_state: State dict of best model
     """
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("Final Finetuning Phase")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print(f"Configuration:")
     print(f"  Epochs: {epochs}")
     print(f"  Learning rate: {lr}")
@@ -1084,84 +1092,84 @@ def full_finetune(model, train_loader, test_loader, device,
     print(f"  Weight decay: 0.01")
     print(f"  Early stopping patience: {patience}")
     print(f"  Save path: {save_path}")
-    print(f"{'='*70}\n")
-    
+    print(f"{'=' * 70}\n")
+
     model.train()
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
-    
+
     # Learning rate scheduler with warmup (helps sparse network training)
     steps_per_epoch = len(train_loader)
     total_steps = epochs * steps_per_epoch
     warmup_steps = int(0.05 * total_steps)  # 5% warmup
-    
+
     scheduler = get_cosine_schedule_with_warmup(
-        optimizer, 
-        num_warmup_steps=warmup_steps, 
+        optimizer,
+        num_warmup_steps=warmup_steps,
         num_training_steps=total_steps
     )
-    
+
     best_accuracy = 0.0
     best_model_state = None
     best_epoch = 0
     epochs_without_improvement = 0
     global_step = 0
-    
+
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
         correct = 0
         total = 0
-        
+
         for batch_idx, (inputs, targets) in enumerate(train_loader):
             inputs, targets = inputs.to(device), targets.to(device)
-            
+
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
             loss.backward()
             optimizer.step()
-            scheduler.step() 
+            scheduler.step()
             global_step += 1
-            
+
             train_loss += loss.item()
             _, predicted = outputs.max(1)
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
-        
+
         train_accuracy = 100.0 * correct / total
         avg_train_loss = train_loss / len(train_loader)
-        
+
         # Evaluate on test set
         model.eval()
         test_correct = 0
         test_total = 0
         test_loss = 0.0
-        
+
         with torch.no_grad():
             for inputs, targets in test_loader:
                 inputs, targets = inputs.to(device), targets.to(device)
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
-                
+
                 test_loss += loss.item()
                 _, predicted = outputs.max(1)
                 test_total += targets.size(0)
                 test_correct += predicted.eq(targets).sum().item()
-        
+
         test_accuracy = 100.0 * test_correct / test_total
         avg_test_loss = test_loss / len(test_loader)
-        
+
         # Get current learning rate (scheduler already stepped in training loop)
         current_lr = scheduler.get_last_lr()[0]
-        
+
         # Track best model
         if test_accuracy > best_accuracy:
             best_accuracy = test_accuracy
             best_model_state = copy.deepcopy(model.state_dict())
             best_epoch = epoch + 1
             epochs_without_improvement = 0
-            
+
             # Save best model
             if save_path:
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -1175,32 +1183,32 @@ def full_finetune(model, train_loader, test_loader, device,
                     print(f"  ✓ Saved new best model (epoch {best_epoch}, acc: {best_accuracy:.2f}%)")
         else:
             epochs_without_improvement += 1
-        
+
         # Print progress
         if verbose and (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch+1:3d}/{epochs} | "
+            print(f"Epoch {epoch + 1:3d}/{epochs} | "
                   f"Train Loss: {avg_train_loss:.4f} | "
                   f"Train Acc: {train_accuracy:.2f}% | "
                   f"Test Loss: {avg_test_loss:.4f} | "
                   f"Test Acc: {test_accuracy:.2f}% | "
                   f"Best: {best_accuracy:.2f}% | "
                   f"LR: {current_lr:.6f}")
-        
+
         # Early stopping check
         if epochs_without_improvement >= patience:
-            print(f"\n{'='*70}")
-            print(f"Early stopping at epoch {epoch+1}: No improvement for {patience} epochs")
+            print(f"\n{'=' * 70}")
+            print(f"Early stopping at epoch {epoch + 1}: No improvement for {patience} epochs")
             print(f"Best accuracy: {best_accuracy:.2f}% (epoch {best_epoch})")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             break
-    
-    print(f"\n{'='*70}")
+
+    print(f"\n{'=' * 70}")
     print(f"Finetuning Completed!")
     print(f"  Best Accuracy: {best_accuracy:.2f}% (epoch {best_epoch})")
     if save_path:
         print(f"  Model saved to: {save_path}")
-    print(f"{'='*70}\n")
-    
+    print(f"{'=' * 70}\n")
+
     return best_accuracy, best_model_state
 
 
@@ -1208,9 +1216,9 @@ def main():
     parser = argparse.ArgumentParser(description='RL-based Regrowth Allocation (NAS-RL Style)')
     parser.add_argument('--m_name', type=str, default='vgg16')
     parser.add_argument('--data_dir', type=str, default='./data')
-    
+
     # RL hyperparameters
-    parser.add_argument('--num_epochs', type=int, default=50,
+    parser.add_argument('--num_epochs', type=int, default=100,
                         help='Number of training epochs')
     parser.add_argument('--batch_size', type=int, default=10,
                         help='Number of allocations to sample per epoch (higher = more stable gradients, slower training)')
@@ -1222,7 +1230,7 @@ def main():
                         help='Entropy bonus coefficient (BETA) - DEPRECATED: use start_beta instead')
     parser.add_argument('--reward_temperature', type=float, default=0.005,
                         help='Temperature τ for reward scaling (reward-baseline)/τ - lower = more sensitive')
-    
+
     # Entropy schedule parameters (for linear decay of entropy coefficient)
     parser.add_argument('--start_beta', type=float, default=0.40,
                         help='Starting entropy coefficient (exploration phase)')
@@ -1230,89 +1238,94 @@ def main():
                         help='Final entropy coefficient (exploitation phase)')
     parser.add_argument('--decay_fraction', type=float, default=0.4,
                         help='Fraction of epochs over which to decay beta (e.g., 0.4 = decay over first 40% of training)')
-    
+
     # Action space
     parser.add_argument('--action_space_size', type=int, default=11,
                         help='Number of discrete ratio values (e.g., 21 for [0, 0.05, ..., 1.0])')
     parser.add_argument('--max_ratio', type=float, default=1.0,
                         help='Maximum allocation ratio per layer')
-    
+
     # Regrowth parameters
-    parser.add_argument('--regrow_step', type=float, default=0.01,
+    parser.add_argument('--regrow_step', type=float, default=0.005,
                         help='Fraction of total weights to regrow per iteration')
     parser.add_argument('--regrow_iterations', type=int, default=1,
                         help='Number of iterative regrowth iterations (1 = single-step)')
     parser.add_argument('--starting_checkpoint', type=str, default='oneshot',
                         choices=['oneshot', 'iterative'],
                         help='Starting checkpoint type: oneshot (0.99 sparsity) or iterative (it19)')
-    
+
     # Finetuning (CRITICAL: Use AdamW with 0.0003 lr for sparse networks)
     parser.add_argument('--finetune_epochs', type=int, default=1500,
                         help='Finetuning epochs (2000 default matches ~400k steps for CIFAR-10)')
     parser.add_argument('--finetune_lr', type=float, default=0.0003,
                         help='Finetuning learning rate (0.0003 proven optimal for sparse networks)')
     parser.add_argument('--save_dir', type=str, default='./rl_nas_checkpoints')
-    
+
     # Checkpoint and resume
     parser.add_argument('--resume', type=str, default=None,
                         help='Path to checkpoint to resume training from')
     parser.add_argument('--save_freq', type=int, default=10,
                         help='Save checkpoint every N epochs')
-    
+
     # Reproducibility
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed for reproducibility')
-    
+
     # Reference model for priority-based regrowth
     parser.add_argument('--reference_model', type=str, default=None,
                         help='Path to reference model checkpoint for priority-based weight selection (if None, uses model_95 as reference)')
-    
+
     args = parser.parse_args()
-    
+
     # Set random seed for reproducibility
     seed_worker = set_seed(args.seed)
     print(f"Random seed set to: {args.seed}")
-    
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f"Device: {device}")
-    
+
     # Load data
     train_loader, val_loader, test_loader = data_loader(data_dir=args.data_dir)
-    
+
     # Load models
     print("Loading models...")
     model_pretrained = model_loader(args.m_name, device)
-    load_model(model_pretrained, f'./{args.m_name}/checkpoint')
-    
+    load_model_name(model_pretrained, f'./{args.m_name}/checkpoint', args.m_name)
+
     # Load target model (model_95)
     model_95 = model_loader(args.m_name, device)
     prune_weights_reparam(model_95)
-    
-    if args.starting_checkpoint == 'oneshot':
-        # Use pretrained model as target (model_95)
-        print("Using pretrained model as target (model_95)")
-        # Add pruning masks to pretrained model (all masks will be 1.0 = no pruning)
-        prune_weights_reparam(model_pretrained)
-        model_95.load_state_dict(model_pretrained.state_dict())
-        print("  Loaded pretrained weights into model_95 with masks (all weights available)")
-    else:
-        # Use iterative sparsity checkpoint as target
-        print("Using iterative 95% sparsity checkpoint as target (model_95)")
-        checkpoint_95 = torch.load(f'./iterative_0.4_10/{args.m_name}/pruned_finetuned_mask_it1.pth')
-        model_95.load_state_dict(checkpoint_95)
-        print("  Loaded 95% sparsity checkpoint into model_95")
-    
+    ######## repare both use pretrain model for target
+    # if args.starting_checkpoint == 'oneshot':
+    #     # Use pretrained model as target (model_95)
+    #     print("Using pretrained model as target (model_95)")
+    #     # Add pruning masks to pretrained model (all masks will be 1.0 = no pruning)
+    #     prune_weights_reparam(model_pretrained)
+    #     model_95.load_state_dict(model_pretrained.state_dict())
+    #     print("  Loaded pretrained weights into model_95 with masks (all weights available)")
+    # else:
+    #     # Use iterative sparsity checkpoint as target
+    #     print("Using iterative 95% sparsity checkpoint as target (model_95)")
+    #     checkpoint_95 = torch.load(f'./iterative_0.4_10/{args.m_name}/pruned_finetuned_mask_it1.pth')
+    #     model_95.load_state_dict(checkpoint_95)
+    #     print("  Loaded 95% sparsity checkpoint into model_95")
+
+    prune_weights_reparam(model_pretrained)
+    model_95.load_state_dict(model_pretrained.state_dict())
+
     # Load starting model (model_current) - depends on starting_checkpoint argument
     model_current = model_loader(args.m_name, device)
     prune_weights_reparam(model_current)
-    
+
     if args.starting_checkpoint == 'oneshot':
         if args.m_name in ["vgg16"]:
-            checkpoint_99 = torch.load(f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_0.995_repeat2_patience30.pth')
+            checkpoint_99 = torch.load(
+                f'./{args.m_name}/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth')
             model_current.load_state_dict(checkpoint_99)
             print("  Loaded one-shot 99.5% sparsity checkpoint")
         elif args.m_name in ["resnet20"]:
-            checkpoint_99 = torch.load(f'./{args.m_name}/ckpt_after_prune/pruned_finetuned_mask_0.95.pth')
+            checkpoint_99 = torch.load(
+                f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.95.pth')
             model_current.load_state_dict(checkpoint_99)
             print("  Loaded one-shot 98% sparsity checkpoint")
         else:
@@ -1327,7 +1340,8 @@ def main():
             print("  Loaded iterative 99% sparsity checkpoint (it8)")
         else:
             # Iterative regrowth: start from iterative 99% sparsity model (iteration 10)
-            checkpoint_99 = torch.load(f'./iterative_0.4_10/{args.m_name}/pruned_finetuned_mask_it10.pth')
+            checkpoint_99 = torch.load(
+                f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9953.pth')
             model_current.load_state_dict(checkpoint_99)
             print("  Loaded iterative 99% sparsity checkpoint (it10)")
 
@@ -1341,7 +1355,8 @@ def main():
         model_reference.load_state_dict(ref_checkpoint)
         print("  Loaded custom reference model for priority-based weight selection")
     else:
-        print("\nNo custom reference model specified, will use model_95 as reference for priority-based weight selection")
+        print(
+            "\nNo custom reference model specified, will use model_95 as reference for priority-based weight selection")
         model_reference = model_95  # Will be set in config
 
     # Target layers
@@ -1350,7 +1365,7 @@ def main():
         #                "layer3.0.conv2", "layer3.0.shortcut.0", "layer3.1.conv1", "layer3.1.conv2",
         #                "layer3.2.conv1", "layer3.2.conv2", "linear"]
         target_layers = ["layer2.0.conv2", "layer2.1.conv1", "layer2.2.conv2", "layer2.2.conv1",
-                       "layer3.0.conv2", "layer3.0.conv1", "layer3.1.conv1", "layer3.1.conv2"]
+                         "layer3.0.conv2", "layer3.0.conv1", "layer3.1.conv1", "layer3.1.conv2"]
 
     # elif args.m_name == "densenet":
     #     target_layers = ["dense3.0.conv1", "dense3.4.conv1", "dense3.7.conv1", 
@@ -1361,11 +1376,13 @@ def main():
     elif args.m_name == "vgg16":
         # target_layers = ["features.14", "features.17", "features.27", 
         #                 "features.30", "features.34", "features.40", "classifier"]
-        target_layers = ["features.14", "features.17", "features.20", "features.24", "features.27", 
-                        "features.0", "features.3", "features.7", "features.10", "classifier"]
+        # target_layers = ["features.14", "features.17", "features.20", "features.24", "features.27",
+        #                 "features.0", "features.3", "features.7", "features.10", "classifier"]
+        # target_layers = ["features.24", "features.20", "features.10"]
+        target_layers = ["features.10", "features.14", "features.17", "features.20", "features.24", "classifier"]
 
     elif args.m_name == "alexnet":
-        target_layers = ['features.3', 'features.6', 'features.8', 'features.10', 'classifier.1']   # 
+        target_layers = ['features.3', 'features.6', 'features.8', 'features.10', 'classifier.1']  #
     # elif args.m_name == "effnet":
     #     target_layers = ["layers.3.conv3", "layers.4.conv1", "layers.4.conv3", "layers.5.conv1",
     #     "layers.6.conv3", "layers.7.conv3", "layers.8.conv1", "layers.8.conv2", "layers.8.conv3",
@@ -1373,61 +1390,61 @@ def main():
 
     else:
         target_layers = []
-    
+
     # Storage for iteration results
     initial_accuracy = None
     initial_sparsity = None
     initial_total = 0
     initial_pruned = 0
     iteration_results = []
-    
+
     # ==========================
     # Iterative Regrowth Loop
     # ==========================
     for iteration in range(args.regrow_iterations):
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print(f"REGROWTH ITERATION {iteration + 1}/{args.regrow_iterations}")
-        print("="*70)
-        
+        print("=" * 70)
+
         # Get layer capacities and references from current state
         layer_capacities = []
         reference_masks = {}
         reference_weights = {}
-        
+
         for layer_name in target_layers:
             # Get capacity relative to current model state
             module_current = dict(model_current.named_modules())[layer_name]
             module_95 = dict(model_95.named_modules())[layer_name]
-            
+
             if hasattr(module_current, 'weight_mask') and hasattr(module_95, 'weight_mask'):
                 current_mask = module_current.weight_mask
                 ref_mask = module_95.weight_mask
                 regrowable = (current_mask == 0) & (ref_mask == 1)
                 capacity = regrowable.sum().item()
                 layer_capacities.append(capacity)
-                
+
                 reference_masks[layer_name] = ref_mask.clone()
                 # CRITICAL: Use weight_orig (unpruned values), not weight (masked values)
                 if hasattr(module_95, 'weight_orig'):
                     reference_weights[layer_name] = module_95.weight_orig.detach().clone()
                 else:
                     reference_weights[layer_name] = module_95.weight.detach().clone()
-        
+
         # Calculate target regrowth for this iteration
         total_weights, _, _ = count_pruned_params(model_current)
         target_regrow = int(total_weights * args.regrow_step)
         target_regrow = min(target_regrow, sum(layer_capacities))
-        
+
         print(f"\nIteration {iteration + 1} Configuration:")
         print(f"  Total weights: {total_weights}")
         print(f"  Target regrowth: {target_regrow}")
         print(f"  Total capacity: {sum(layer_capacities)}")
         print(f"  Num layers: {len(target_layers)}")
-        
+
         if target_regrow == 0:
             print(f"  No capacity remaining for regrowth. Stopping iterations.")
             break
-        
+
         # Setup config for this iteration
         config = {
             'num_epochs': args.num_epochs,
@@ -1450,7 +1467,7 @@ def main():
             'end_beta': getattr(args, 'end_beta', 0.04),
             'decay_fraction': getattr(args, 'decay_fraction', 0.4),
         }
-        
+
         # Initialize Policy Gradient for this iteration
         pg = RegrowthPolicyGradient(
             config=config,
@@ -1462,28 +1479,28 @@ def main():
             test_loader=test_loader,
             device=device
         )
-        
+
         # Evaluate before regrowth
         before_accuracy = pg.evaluate_model(model_current, full_eval=True)
         before_sparsity, before_total, before_pruned = pg.calculate_sparsity(model_current)
         print(f"\nBefore iteration {iteration + 1}:")
         print(f"  Accuracy: {before_accuracy:.2f}%")
         print(f"  Sparsity: {before_sparsity:.2f}% ({before_pruned}/{before_total} pruned)")
-        
+
         # Run RL training
-        print("\n" + "-"*70)
+        print("\n" + "-" * 70)
         print(f"RL Training Phase (Iteration {iteration + 1})")
-        print("-"*70)
+        print("-" * 70)
         # Only use resume on first iteration if specified
         resume_checkpoint = args.resume if iteration == 0 else None
         best_allocation, best_reward, best_regrow_indices = pg.solve_environment(resume_from=resume_checkpoint)
-        
+
         # Apply best allocation to current model
-        print("\n" + "-"*70)
+        print("\n" + "-" * 70)
         print(f"Applying Best Allocation (Iteration {iteration + 1})")
-        print("-"*70)
+        print("-" * 70)
         pg.apply_allocation(model_current, best_allocation, best_regrow_indices)
-        
+
         # Evaluate after regrowth
         after_regrow_accuracy = pg.evaluate_model(model_current, full_eval=True)
         after_regrow_sparsity, after_total, after_pruned = pg.calculate_sparsity(model_current)
@@ -1491,12 +1508,12 @@ def main():
         print(f"  Accuracy: {after_regrow_accuracy:.2f}%")
         print(f"  Sparsity: {after_regrow_sparsity:.2f}% ({after_pruned}/{after_total} pruned)")
         print(f"  Improvement: {after_regrow_accuracy - before_accuracy:+.2f}%")
-        
+
         # Intermediate finetuning (except for last iteration)
         if iteration < args.regrow_iterations - 1:
-            print("\n" + "-"*70)
+            print("\n" + "-" * 70)
             print(f"Intermediate Finetuning (Iteration {iteration + 1})")
-            print("-"*70)
+            print("-" * 70)
             inter_save_path = os.path.join(args.save_dir, f'iter_{iteration + 1}_model_{args.m_name}.pth')
             inter_accuracy, inter_state = full_finetune(
                 model=model_current,
@@ -1508,19 +1525,19 @@ def main():
                 save_path=inter_save_path,
                 verbose=True
             )
-            
+
             # Reload best intermediate model
             model_current.load_state_dict(inter_state)
             inter_eval_accuracy = pg.evaluate_model(model_current, full_eval=True)
             inter_sparsity, _, _ = pg.calculate_sparsity(model_current)
-            
+
             print(f"\nAfter intermediate finetuning (iteration {iteration + 1}):")
             print(f"  Best accuracy: {inter_accuracy:.2f}%")
             print(f"  Final evaluation: {inter_eval_accuracy:.2f}%")
             print(f"  Sparsity: {inter_sparsity:.2f}%")
         else:
             inter_accuracy = after_regrow_accuracy
-        
+
         # Store iteration results
         iteration_results.append({
             'iteration': iteration + 1,
@@ -1534,11 +1551,11 @@ def main():
             'target_regrow': target_regrow,
             'weights_regrown': before_pruned - after_pruned,
         })
-    
+
     # Final comprehensive finetuning (after all iterations)
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Final Comprehensive Finetuning (After All Iterations)")
-    print("="*70)
+    print("=" * 70)
     final_save_path = os.path.join(args.save_dir, f'best_model_rl_nas_{args.m_name}_final.pth')
     final_accuracy, final_state = full_finetune(
         model=model_current,
@@ -1550,14 +1567,14 @@ def main():
         save_path=final_save_path,
         verbose=True
     )
-    
+
     # Load best model for final evaluation
     model_current.load_state_dict(final_state)
-    
+
     # Use helper functions for evaluation if pg doesn't exist (e.g., when no iterations ran)
     final_eval_accuracy = evaluate_model_accuracy(model_current, test_loader, device, full_eval=True)
     final_sparsity, final_total, final_pruned = calculate_model_sparsity(model_current)
-    
+
     # ==========================
     # Final Results Summary
     # ==========================
@@ -1566,13 +1583,13 @@ def main():
         initial_accuracy = iteration_results[0]['before_accuracy']
         initial_sparsity = iteration_results[0]['before_sparsity']
         initial_pruned = iteration_results[0]['before_sparsity'] / 100.0 * final_total  # Approximate
-    
-    print("\n" + "="*70)
+
+    print("\n" + "=" * 70)
     print("FINAL RESULTS SUMMARY")
-    print("="*70)
+    print("=" * 70)
     print(f"Model: {args.m_name}")
     print(f"Regrowth iterations: {args.regrow_iterations}")
-    print(f"Regrowth step per iteration: {args.regrow_step*100:.1f}%")
+    print(f"Regrowth step per iteration: {args.regrow_step * 100:.1f}%")
     if initial_accuracy is not None:
         print(f"\nInitial state:")
         print(f"  Accuracy: {initial_accuracy:.2f}%")
@@ -1591,13 +1608,14 @@ def main():
         print(f"  Iteration {result['iteration']}:")
         print(f"    Target regrowth: {result['target_regrow']} weights")
         print(f"    Before: {result['before_accuracy']:.2f}% (sparsity: {result['before_sparsity']:.2f}%)")
-        print(f"    After regrowth: {result['after_regrow_accuracy']:.2f}% (sparsity: {result['after_regrow_sparsity']:.2f}%)")
+        print(
+            f"    After regrowth: {result['after_regrow_accuracy']:.2f}% (sparsity: {result['after_regrow_sparsity']:.2f}%)")
         if result['after_finetune_accuracy'] is not None:
             print(f"    After finetune: {result['after_finetune_accuracy']:.2f}%")
         print(f"    Weights regrown: {result['weights_regrown']}")
     print(f"\nFinal model saved to: {final_save_path}")
-    print("="*70)
-    
+    print("=" * 70)
+
     print("All done!")
 
     run.finish()

@@ -22,7 +22,7 @@ from iclr2021_solution.tools import *
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Prune')
 
-parser.add_argument('--m_name', type=str, default="densenet",
+parser.add_argument('--m_name', type=str, default="vgg16",
                     help='Model name (e.g., resnet18, vgg16, etc.)')
 # desnet, effnet, resnet20, vgg16
 parser.add_argument('--pruner', type=str, default='lamp', help='pruning method')
@@ -90,7 +90,7 @@ else:
     sparsity = args.oneshot
     opt_post = {
         "optimizer": partial(optim.AdamW, lr=0.0003),
-        "steps": 400*313,  # 40000 for iterative, 400000 for one-shot
+        "steps": 400,  # 40000 for iterative, 400000 for one-shot
         "scheduler": None
     }
 
@@ -104,6 +104,6 @@ for it in range(args.iter_start, args.iter_end + 1):
     formatted_mask = round(true_mask, 4)
 
 
-    target_path_mask = os.path.join(target_folder, f'pruned_oneshot_mask_{formatted_mask}.pth')
+    target_path_mask = os.path.join(target_folder, f'pruned_oneshot_mask_{formatted_mask}_test.pth')
     torch.save(net.state_dict(), target_path_mask)
 

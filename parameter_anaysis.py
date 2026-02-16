@@ -3,7 +3,7 @@ from utils.model_loader import model_loader
 
 MODELS = {
     "vgg16": {
-        "pretrained": "vgg16/checkpoint/pretrain_vgg16_ckpt.pth",
+        "pretrained": "vgg16/checkpoint/pretrain_vgg16_ckpt.pth"
     }
 }
 
@@ -16,13 +16,14 @@ def load_pretrained(ckpt_path, device, model_name):
 
 
 def count_params(model):
-
     total = 0
     for name, param in model.named_parameters():
+        if 'bias' in name:  # 跳过bias
+            continue
         num = param.numel()
         print(f"{name}: {num:,}")
         total += num
-    print(f"\nTotal: {total:,}")
+    print(f"\nTotal (without bias): {total:,}")
     return total
 
 
