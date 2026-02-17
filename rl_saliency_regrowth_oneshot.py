@@ -26,7 +26,7 @@ run = wandb.init(
         "learning_rate": 5e-3,
         "architecture": "VGG16",
         "regrow_step": 0.005,
-        "epochs": 500,
+        "epochs": 300,
     },
 )
 
