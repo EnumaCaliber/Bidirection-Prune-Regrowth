@@ -11,7 +11,7 @@ import wandb
 import random
 from torch.distributions import Categorical
 from transformers import get_cosine_schedule_with_warmup
-from collections import deque, defaultdict
+from collections import deque
 from tqdm import tqdm
 
 from utils.model_loader import model_loader
@@ -713,7 +713,7 @@ class RegrowthPolicyGradient:
                     )
                     actual_regrown[layer_name] = actual
                     regrow_indices[layer_name] = indices
-
+        pre_finetune_state = copy.deepcopy(model_copy.state_dict())
         # Mini finetune
         self.mini_finetune(model_copy, epochs=50)
 
@@ -726,6 +726,7 @@ class RegrowthPolicyGradient:
 
         # Save model if accuracy exceeds the user-provided baseline
         if self.acc_baseline is not None and reward > self.acc_baseline:
+            model_copy.load_state_dict(pre_finetune_state)
             self._save_baseline_model(epoch, reward, model_copy, allocation)
 
         # Update baseline and compute advantage
@@ -1021,7 +1022,7 @@ def main():
     parser.add_argument('--saliency_max_batches', type=int, default=50)
 
     # Early stopping parameters
-    parser.add_argument('--early_stop_patience', type=int, default=2,
+    parser.add_argument('--early_stop_patience', type=int, default=1,
                         help='Stop if no reward improvement for this many epochs')
     parser.add_argument('--min_epochs', type=int, default=50,
                         help='Minimum epochs before reward_std / entropy checks activate')
