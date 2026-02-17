@@ -1,7 +1,3 @@
-# Author
-- Zach Liu, University of British Columbia
-- Sheng Yi, University of Florida
-- Qun Gai, University of British Columbia
 # Bidirectional Pruning-Regrowth
 This folder contains code and experiment artifacts for both **one-shot magnitude pruning**, **iterative magnitude pruning**. We implement our **regrowth** strategy applying to models (e.g., `resnet20`, `vgg16`, `alexnet`) and evaluated on CIFAR-10 dataset.
 
