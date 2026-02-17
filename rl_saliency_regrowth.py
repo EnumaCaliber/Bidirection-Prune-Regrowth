@@ -41,7 +41,7 @@ run = wandb.init(
     config={
         "learning_rate": 5e-3,
         "architecture": "VGG16",
-        "regrow_step": 0.005,
+        "regrow_step": 0.015,
         "epochs": 500,
     },
 )
@@ -957,7 +957,7 @@ def main():
     parser.add_argument('--action_space_size', type=int, default=11)
 
     # Regrowth parameters
-    parser.add_argument('--regrow_step', type=float, default=0.005)
+    parser.add_argument('--regrow_step', type=float, default=0.035)
     parser.add_argument('--init_strategy', type=str, default='zero',
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)

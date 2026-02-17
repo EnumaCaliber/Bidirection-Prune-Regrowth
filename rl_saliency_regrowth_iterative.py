@@ -1,7 +1,3 @@
-"""
-RL-based Regrowth with Saliency-Based Selection - Iterative Version (Optimized)
-"""
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -585,6 +581,17 @@ def iterative_regrowth(args, model_pretrained, model_pruned, target_layers,
     results = []
     current_model = model_pruned
 
+    saliency_computer = SaliencyComputer(
+        model_pretrained,
+        nn.CrossEntropyLoss(),
+        device
+    )
+    global_saliency_dict = saliency_computer.compute(
+        train_loader,
+        target_layers,
+        args.saliency_max_batches
+    )
+
     for round_idx, regrow_step in enumerate(regrow_steps):
         print(f"\n{'=' * 70}")
         print(f"REGROWTH ROUND {round_idx + 1}/{num_rounds}")
@@ -605,18 +612,6 @@ def iterative_regrowth(args, model_pretrained, model_pruned, target_layers,
         print(f"  Total pruned weights: {total_weights}")
         print(f"  Target regrowth: {target_regrow}")
         print(f"  Available capacity: {sum(layer_capacities)}")
-
-        print(f"\n  Computing saliency scores for round {round_idx + 1}...")
-        saliency_computer = SaliencyComputer(
-            current_model,  # ← 使用当前模型而非pretrained
-            nn.CrossEntropyLoss(),
-            device
-        )
-        current_saliency_dict = saliency_computer.compute(
-            train_loader,
-            target_layers,
-            args.saliency_max_batches
-        )
 
         # Setup config for this round
         config = {
@@ -655,7 +650,7 @@ def iterative_regrowth(args, model_pretrained, model_pruned, target_layers,
             device=device
         )
 
-        pg.saliency_dict = current_saliency_dict
+        pg.saliency_dict = global_saliency_dict
 
         # Evaluate before this round
         before_acc = pg.evaluate(current_model, full=True)
@@ -685,7 +680,7 @@ def iterative_regrowth(args, model_pretrained, model_pruned, target_layers,
             'finetune_epochs': args.mini_finetune_epochs,
             'finetune_lr': args.finetune_lr,
             'finetune_weight_decay': 0.01,
-            'finetune_patience': max(10, args.mini_finetune_epochs // 4),
+            'finetune_patience': 40,
             'warmup_ratio': 0.05,
             'finetune_save_path': str(
                 Path(args.save_dir) / args.m_name / args.method / f'round_{round_idx + 1}_model.pth'

@@ -10,7 +10,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='vgg16')
-parser.add_argument('--model_path', type=str, default='./vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth')  # 改为 model_path
+parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/oneshot/final_model_92.4.pth')  # 改为 model_path
 args = parser.parse_args()
 
 
