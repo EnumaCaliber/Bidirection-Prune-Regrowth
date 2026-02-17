@@ -922,7 +922,7 @@ class RegrowthPolicyGradient:
         torch.save(best_data, best_path)
         print(f"  ✓ New best! Reward: {best_reward:.4f} ({best_reward * 100:.2f}%) at epoch {epoch + 1}")
 
-
+# no useful
 def full_finetune(model, train_loader, test_loader, device,
                   epochs=1500, lr=0.0003, save_path=None, patience=30):
     """Full finetuning with early stopping"""
@@ -1021,7 +1021,7 @@ def main():
     parser.add_argument('--saliency_max_batches', type=int, default=50)
 
     # Early stopping parameters
-    parser.add_argument('--early_stop_patience', type=int, default=40,
+    parser.add_argument('--early_stop_patience', type=int, default=2,
                         help='Stop if no reward improvement for this many epochs')
     parser.add_argument('--min_epochs', type=int, default=50,
                         help='Minimum epochs before reward_std / entropy checks activate')
@@ -1034,7 +1034,7 @@ def main():
 
     # Accuracy baseline: save any episode model whose accuracy exceeds this value
     # Expressed as a fraction in [0, 1], e.g. 0.85 means 85%. Disabled if not set.
-    parser.add_argument('--acc_baseline', type=float, default=0.9011,
+    parser.add_argument('--acc_baseline', type=float, default=0.8,
                         help='Save episode model whenever accuracy exceeds this threshold '
                              '(fraction, e.g. 0.85 for 85%%). Disabled by default.')
 

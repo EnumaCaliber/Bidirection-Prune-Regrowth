@@ -10,7 +10,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='vgg16')
-parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/oneshot/final_model_92.4.pth')  # 改为 model_path
+parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/oneshot/0.99/baseline_exceeded_epoch1_acc0.9012.pth')  # 改为 model_path
 args = parser.parse_args()
 
 
@@ -33,7 +33,8 @@ def test(model, loader):
 
 
 def load_model(ckpt_path, model_name, device):
-    sd = torch.load(ckpt_path, map_location=device)
+    sd = torch.load(ckpt_path, map_location=device).get('model_state_dict')
+
     merged, done = {}, set()
 
     for k in sd:
@@ -51,7 +52,7 @@ def load_model(ckpt_path, model_name, device):
 
 
 def get_sparsity(ckpt_path):
-    sd = torch.load(ckpt_path, map_location='cpu')
+    sd = torch.load(ckpt_path, map_location=device).get('model_state_dict')
     total = sum(v.numel() for k, v in sd.items() if k.endswith('_mask'))
     zeros = sum((v == 0).sum().item() for k, v in sd.items() if k.endswith('_mask'))
     return zeros / total * 100 if total > 0 else 0
