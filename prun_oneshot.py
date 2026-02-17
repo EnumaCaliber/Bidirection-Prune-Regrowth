@@ -90,7 +90,7 @@ else:
     sparsity = args.oneshot
     opt_post = {
         "optimizer": partial(optim.AdamW, lr=0.0003),
-        "steps": 400,  # 40000 for iterative, 400000 for one-shot
+        "steps": 400*313,  # 40000 for iterative, 400000 for one-shot
         "scheduler": None
     }
 

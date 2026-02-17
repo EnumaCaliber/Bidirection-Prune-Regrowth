@@ -13,6 +13,8 @@ import argparse
 import wandb
 
 from functools import partial
+
+from iclr2021_solution.tools.train import trainer_loader_wandb
 from utils.utils import progress_bar
 from utils.model_loader import model_loader
 from utils.data_loader import data_loader
@@ -68,7 +70,7 @@ print(f'true mask {true_mask}')
 _, sparsity, batch_size, opt_pre, opt_post = model_and_opt_loader(args.m_name, device)
 
 pruner = weight_pruner_loader(args.pruner)
-trainer = trainer_loader()
+trainer = trainer_loader_wandb()
 utils.prune_weights_reparam(net)
 
 """ PRUNE AND RETRAIN """
@@ -94,7 +96,7 @@ else:
     sparsity = args.oneshot
     opt_post = {
         "optimizer": partial(optim.AdamW, lr=0.0003),
-        "steps": 400,  # 40000 for iterative, 400000 for one-shot
+        "steps": 400*313,  # 40000 for iterative, 400000 for one-shot
         "scheduler": None
     }
 

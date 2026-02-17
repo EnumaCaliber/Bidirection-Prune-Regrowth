@@ -732,7 +732,7 @@ def main():
     parser = argparse.ArgumentParser(description='Single-Layer Regrowth Analysis')
 
     # Model and data
-    parser.add_argument('--m_name', type=str, default='vgg16',
+    parser.add_argument('--m_name', type=str, default='resnet20',
                        help='Model name')
     parser.add_argument('--data_dir', type=str, default='./data',
                        help='Data directory')
@@ -740,9 +740,9 @@ def main():
     # Regrowth parameters
     parser.add_argument('--target_sparsity', type=float, default=0.0,
                        help='Target sparsity for reference model AND regrowth target (0.0 = pretrained, 0.95, 0.97, etc.)')
-    parser.add_argument('--start_sparsity', type=float, default=0.995,
+    parser.add_argument('--start_sparsity', type=float, default=0.9903,
                        help='Starting sparsity (highly pruned model)')
-    parser.add_argument('--starting_checkpoint', type=str, default='oneshot',
+    parser.add_argument('--starting_checkpoint', type=str, default='iterative',
                        choices=['oneshot', 'iterative'],
                        help='Checkpoint type: oneshot or iterative')
     
