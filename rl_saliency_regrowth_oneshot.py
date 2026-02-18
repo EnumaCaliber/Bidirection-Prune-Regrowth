@@ -32,7 +32,7 @@ run = wandb.init(
 
 method = "oneshot"
 model_name = "vgg16"
-model_sparsity = "0.98"
+
 
 
 def set_seed(seed=42):
