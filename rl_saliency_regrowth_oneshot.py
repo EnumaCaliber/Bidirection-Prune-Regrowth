@@ -1018,7 +1018,7 @@ def main():
     parser.add_argument('--action_space_size', type=int, default=11)
 
     # Regrowth parameters
-    parser.add_argument('--regrow_step', type=float, default=0.015)
+    parser.add_argument('--regrow_step', type=float, default=0.005)
     parser.add_argument('--init_strategy', type=str, default='zero',
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)
@@ -1037,7 +1037,7 @@ def main():
 
     # Accuracy baseline: save any episode model whose accuracy exceeds this value
     # Expressed as a fraction in [0, 1], e.g. 0.85 means 85%. Disabled if not set.
-    parser.add_argument('--acc_baseline', type=float, default=0.8,
+    parser.add_argument('--acc_baseline', type=float, default=0.9011,
                         help='Save episode model whenever accuracy exceeds this threshold '
                              '(fraction, e.g. 0.85 for 85%%). Disabled by default.')
 
