@@ -20,19 +20,19 @@ from utils.analysis_utils import (load_model_name, prune_weights_reparam, count_
 
 # Start wandb run
 run = wandb.init(
-    project="ICCAD_solu26_saliency",
-    name="regrowth_from99.5_to99",
+    project="ICCAD_saliency_fianl",
+    name="regrowth_from99.5_to98",
     config={
         "learning_rate": 5e-3,
         "architecture": "VGG16",
-        "regrow_step": 0.005,
+        "regrow_step": 0.015,
         "epochs": 300,
     },
 )
 
 method = "oneshot"
 model_name = "vgg16"
-model_sparsity = "0.99"
+model_sparsity = "0.98"
 
 
 def set_seed(seed=42):
@@ -547,12 +547,11 @@ class RegrowthPolicyGradient:
                     stop_reason = (f"Reward std={reward_std:.5f} < {self.reward_std_threshold} "
                                    f"over last {self.reward_window_size} epochs (reward stable)")
 
-            # Condition 3: policy entropy collapsed (only after min_epochs)
-            elif epoch >= self.min_epochs and current_entropy < self.min_entropy_threshold:
-                should_stop = True
-                stop_reason = (f"Entropy={current_entropy:.4f} < {self.min_entropy_threshold} "
-                               f"(policy collapsed)")
-            # ──────────────────────────────────────────────────────────────────
+            # # Condition 3: policy entropy collapsed (only after min_epochs)
+            # elif epoch >= self.min_epochs and current_entropy < self.min_entropy_threshold:
+            #     should_stop = True
+            #     stop_reason = (f"Entropy={current_entropy:.4f} < {self.min_entropy_threshold} "
+            #                    f"(policy collapsed)")
 
             # Logging
             pg_norm = torch.norm(episode_weighted_log_prob).item()
@@ -1018,7 +1017,7 @@ def main():
     parser.add_argument('--action_space_size', type=int, default=11)
 
     # Regrowth parameters
-    parser.add_argument('--regrow_step', type=float, default=0.005)
+    parser.add_argument('--regrow_step', type=float, default=0.015)
     parser.add_argument('--init_strategy', type=str, default='zero',
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)
@@ -1037,7 +1036,7 @@ def main():
 
     # Accuracy baseline: save any episode model whose accuracy exceeds this value
     # Expressed as a fraction in [0, 1], e.g. 0.85 means 85%. Disabled if not set.
-    parser.add_argument('--acc_baseline', type=float, default=0.9011,
+    parser.add_argument('--acc_baseline', type=float, default=0.9128,
                         help='Save episode model whenever accuracy exceeds this threshold '
                              '(fraction, e.g. 0.85 for 85%%). Disabled by default.')
 
