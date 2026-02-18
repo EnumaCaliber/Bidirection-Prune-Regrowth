@@ -34,7 +34,6 @@ method = "oneshot"
 model_name = "vgg16"
 
 
-
 def set_seed(seed=42):
     """Set random seed for reproducibility"""
     random.seed(seed)
@@ -891,7 +890,7 @@ class RegrowthPolicyGradient:
         """Save training checkpoint"""
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         checkpoint_path = os.path.join(self.checkpoint_dir,
-                                       f'{model_name}/{method}/saliency_rl_checkpoint_epoch_{epoch + 1}.pth')
+                                       f'{model_name}/{method}/{self.model_sparsity}/saliency_rl_checkpoint_epoch_{epoch + 1}.pth')
 
         checkpoint = {
             'epoch': epoch,
@@ -910,7 +909,8 @@ class RegrowthPolicyGradient:
     def _save_best_allocation(self, epoch, best_reward, best_allocation, best_regrow_indices):
         """Save best allocation"""
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        best_path = os.path.join(self.checkpoint_dir, f'{model_name}/{method}/best_saliency_allocation.pth')
+        best_path = os.path.join(self.checkpoint_dir,
+                                 f'{model_name}/{method}/{self.model_sparsity}/best_saliency_allocation.pth')
 
         best_data = {
             'epoch': epoch,
