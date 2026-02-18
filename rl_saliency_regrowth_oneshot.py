@@ -410,6 +410,7 @@ class RegrowthPolicyGradient:
 
         # Checkpoint settings
         self.checkpoint_dir = config.get('checkpoint_dir', './rl_saliency_checkpoints')
+        self.model_sparsity = config.get('model_sparsity', '0.98')
         self.save_freq = config.get('save_freq', 1)
 
         # Entropy schedule
@@ -868,7 +869,7 @@ class RegrowthPolicyGradient:
         os.makedirs(save_dir, exist_ok=True)
 
         # File name encodes epoch and accuracy for easy identification
-        filename = f'{model_sparsity}/baseline_exceeded_epoch{epoch + 1}_acc{accuracy:.4f}.pth'
+        filename = f'{self.model_sparsity}/baseline_exceeded_epoch{epoch + 1}_acc{accuracy:.4f}.pth'
         save_path = os.path.join(save_dir, filename)
 
         torch.save({
@@ -1001,7 +1002,7 @@ def main():
     parser = argparse.ArgumentParser(description='RL with Saliency-Based Regrowth')
     parser.add_argument('--m_name', type=str, default='vgg16')
     parser.add_argument('--data_dir', type=str, default='./data')
-
+    parser.add_argument('--model_sparsity', type=str, default='0.99')
     # RL hyperparameters
     parser.add_argument('--num_epochs', type=int, default=300)
     parser.add_argument('--batch_size', type=int, default=1)
@@ -1036,7 +1037,7 @@ def main():
 
     # Accuracy baseline: save any episode model whose accuracy exceeds this value
     # Expressed as a fraction in [0, 1], e.g. 0.85 means 85%. Disabled if not set.
-    parser.add_argument('--acc_baseline', type=float, default=0.9128,
+    parser.add_argument('--acc_baseline', type=float, default=0.8,
                         help='Save episode model whenever accuracy exceeds this threshold '
                              '(fraction, e.g. 0.85 for 85%%). Disabled by default.')
 
@@ -1132,6 +1133,7 @@ def main():
         'reward_window_size': args.reward_window_size,
         # Accuracy baseline
         'acc_baseline': args.acc_baseline,
+        'model_sparsity': args.model_sparsity,
     }
 
     # Initialize Policy Gradient
