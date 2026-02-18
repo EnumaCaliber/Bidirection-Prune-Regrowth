@@ -21,7 +21,7 @@ from utils.analysis_utils import (load_model_name, prune_weights_reparam, count_
 # Start wandb run
 run = wandb.init(
     project="ICCAD_saliency_fianl",
-    name="regrowth_from99.5_to98",
+    name="regrowth_from99.5",
     config={
         "learning_rate": 5e-3,
         "architecture": "VGG16",
@@ -1135,7 +1135,9 @@ def main():
         'acc_baseline': args.acc_baseline,
         'model_sparsity': args.model_sparsity,
     }
-
+    print(f"\n{'=' * 70}")
+    print(f"target sparsity: {args.model_sparsity}")
+    print(f"\n{'=' * 70}")
     # Initialize Policy Gradient
     pg = RegrowthPolicyGradient(
         config=config,
