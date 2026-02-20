@@ -21,12 +21,12 @@ from utils.analysis_utils import (load_model_name, prune_weights_reparam, count_
 # Start wandb run
 run = wandb.init(
     project="ICCAD_saliency_fianl",
-    name="regrowth_from99.5",
+    name="regrowth_from99.5_to0.97",
     config={
         "learning_rate": 5e-3,
         "architecture": "VGG16",
-        "regrow_step": 0.015,
-        "epochs": 300,
+        "regrow_step": 0.025,
+        "epochs": 400,
     },
 )
 
@@ -368,6 +368,11 @@ class RegrowthPolicyGradient:
         # Accuracy baseline: save model whenever this threshold is exceeded
         # None means disabled; pass e.g. 0.85 to save any episode with acc > 85%
         self.acc_baseline = config.get('acc_baseline', None)
+
+        #
+        self.baseline_exceeded = False
+        self._best_model_state = None
+        self._best_reward_seen = float('-inf')
 
         # Saliency computer
         self.saliency_computer = SaliencyComputer(
@@ -724,6 +729,10 @@ class RegrowthPolicyGradient:
         # Compute reward
         reward = accuracy / 100.0
 
+        if reward > self._best_reward_seen:
+            self._best_reward_seen = reward
+            self._best_model_state = copy.deepcopy(model_copy.state_dict())
+
         # Save model if accuracy exceeds the user-provided baseline
         if self.acc_baseline is not None and reward > self.acc_baseline:
             model_copy.load_state_dict(pre_finetune_state)
@@ -863,6 +872,7 @@ class RegrowthPolicyGradient:
 
     def _save_baseline_model(self, epoch, accuracy, model, allocation):
         """Save model state when accuracy exceeds the provided baseline threshold."""
+        self.baseline_exceeded = True  # ← 加这行
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         save_dir = os.path.join(self.checkpoint_dir, f'{self._model_name}/{method}')
         os.makedirs(save_dir, exist_ok=True)
@@ -1002,9 +1012,9 @@ def main():
     parser = argparse.ArgumentParser(description='RL with Saliency-Based Regrowth')
     parser.add_argument('--m_name', type=str, default='vgg16')
     parser.add_argument('--data_dir', type=str, default='./data')
-    parser.add_argument('--model_sparsity', type=str, default='0.99')
+    parser.add_argument('--model_sparsity', type=str, default='0.97')
     # RL hyperparameters
-    parser.add_argument('--num_epochs', type=int, default=300)
+    parser.add_argument('--num_epochs', type=int, default=400)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=3e-4)
     parser.add_argument('--hidden_size', type=int, default=64)
@@ -1018,13 +1028,13 @@ def main():
     parser.add_argument('--action_space_size', type=int, default=11)
 
     # Regrowth parameters
-    parser.add_argument('--regrow_step', type=float, default=0.005)
+    parser.add_argument('--regrow_step', type=float, default=0.025)
     parser.add_argument('--init_strategy', type=str, default='zero',
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)
 
     # Early stopping parameters
-    parser.add_argument('--early_stop_patience', type=int, default=30,
+    parser.add_argument('--early_stop_patience', type=int, default=50,
                         help='Stop if no reward improvement for this many epochs')
     parser.add_argument('--min_epochs', type=int, default=50,
                         help='Minimum epochs before reward_std / entropy checks activate')
@@ -1037,7 +1047,7 @@ def main():
 
     # Accuracy baseline: save any episode model whose accuracy exceeds this value
     # Expressed as a fraction in [0, 1], e.g. 0.85 means 85%. Disabled if not set.
-    parser.add_argument('--acc_baseline', type=float, default=0.9011,
+    parser.add_argument('--acc_baseline', type=float, default=0.9182,
                         help='Save episode model whenever accuracy exceeds this threshold '
                              '(fraction, e.g. 0.85 for 85%%). Disabled by default.')
 
