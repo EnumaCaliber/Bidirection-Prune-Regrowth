@@ -11,7 +11,7 @@ from utils.data_loader import data_loader
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='vgg16')
-parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/oneshot/0.99fullfinetune/final_model_sparsity_9159.pth')
+parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/iterative/iter_1/best_grown_model.pth')
 #parser.add_argument('--model_path', type=str, default='./vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.99.pth')
 parser.add_argument('--data_dir', type=str, default='./data')
 args = parser.parse_args()
