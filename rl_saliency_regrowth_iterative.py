@@ -559,7 +559,7 @@ def main():
     parser.add_argument('--regrow_step', type=float, default=0.0025,
                         help='Fraction of total weights to regrow per iteration')
     # RL
-    parser.add_argument('--num_epochs', type=int, default=1)
+    parser.add_argument('--num_epochs', type=int, default=2)
     parser.add_argument('--learning_rate', type=float, default=3e-4)
     parser.add_argument('--hidden_size', type=int, default=64)
     parser.add_argument('--entropy_coef', type=float, default=0.5)
