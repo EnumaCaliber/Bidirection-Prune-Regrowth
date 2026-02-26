@@ -11,7 +11,7 @@ from utils.data_loader import data_loader
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='vgg16')
-parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/iterative/iter_1/best_grown_model.pth')
+parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/iterative/iter1_sp0.9893/best_model_epoch3_acc90.70.pth0')
 #parser.add_argument('--model_path', type=str, default='./vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.99.pth')
 parser.add_argument('--data_dir', type=str, default='./data')
 args = parser.parse_args()
@@ -24,7 +24,7 @@ def get_sparsity(sd):
 
 
 def load_model(ckpt_path, model_name, device):
-    sd = torch.load(ckpt_path, map_location=device)
+    sd = torch.load(ckpt_path, map_location=device)['model_state_dict']
 
     merged, done = {}, set()
     for k in sd:

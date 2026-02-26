@@ -554,12 +554,13 @@ def main():
     parser.add_argument('--method', type=str, default="iterative")
 
     # Sparsity schedule
-    parser.add_argument('--start_sparsity', type=float, default=0.995)
-    parser.add_argument('--target_sparsity', type=float, default=0.99)
-    parser.add_argument('--regrow_step', type=float, default=0.0025,
+    parser.add_argument('--start_sparsity', type=float, default=0.9953)
+    parser.add_argument('--target_sparsity', type=float, default=0.98)
+    parser.add_argument('--regrow_step', type=float, default=0.003,
                         help='Fraction of total weights to regrow per iteration')
+    parser.add_argument('--num_iters', type=int, default=5)
     # RL
-    parser.add_argument('--num_epochs', type=int, default=2)
+    parser.add_argument('--num_epochs', type=int, default=300)
     parser.add_argument('--learning_rate', type=float, default=3e-4)
     parser.add_argument('--hidden_size', type=int, default=64)
     parser.add_argument('--entropy_coef', type=float, default=0.5)
@@ -573,7 +574,7 @@ def main():
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     # Early stopping
     parser.add_argument('--early_stop_patience', type=int, default=40)
-    parser.add_argument('--min_epochs', type=int, default=40)
+    parser.add_argument('--min_epochs', type=int, default=50)
     parser.add_argument('--reward_std_threshold', type=float, default=0.002)
     parser.add_argument('--reward_window_size', type=int, default=20)
     # Misc
@@ -642,7 +643,8 @@ def main():
 
     regrow_per_iter = int(total_weights * args.regrow_step)
     # TODO
-    num_iters = max(1, math.ceil((args.start_sparsity - args.target_sparsity) / args.regrow_step))
+    #num_iters = max(1, math.ceil((args.start_sparsity - args.target_sparsity) / args.regrow_step))
+    num_iters = args.num_iters
 
     print(f"\n{'=' * 70}")
     print(f"Iterative Regrowth Plan")
@@ -686,9 +688,8 @@ def main():
         print(f"{'#' * 70}\n")
 
         layer_capacities = get_layer_capacities(current_model, target_layers)
-        # TODO
-        remaining = int(total_weights * (cur_sp / 100 - args.target_sparsity))
-        target_regrow = min(regrow_per_iter, remaining, sum(layer_capacities))
+        # TODO need check
+        target_regrow = min(regrow_per_iter, sum(layer_capacities))
 
         if target_regrow == 0:
             print("  All pruned weights already restored. Stopping.")
