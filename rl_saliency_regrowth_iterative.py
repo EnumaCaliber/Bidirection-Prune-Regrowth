@@ -549,7 +549,7 @@ def get_sparsity(model):
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name', type=str, default='vgg16')
+    parser.add_argument('--m_name', type=str, default='resnet20')
     parser.add_argument('--data_dir', type=str, default='./data')
     parser.add_argument('--method', type=str, default="iterative")
 
@@ -595,13 +595,13 @@ def main():
     if args.m_name == 'resnet20':
         initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
                         'pruned_finetuned_mask_0.9953.pth')
-        target_layers = ["layer3.0.conv2", "layer3.1.conv1",
-                         "layer3.1.conv2", "layer3.2.conv1"]
+        target_layers = ["layer1.2.conv1", "layer2.1.conv1", "layer2.1.conv2", "layer2.2.conv1", "layer2.2.conv2",
+                         "layer3.0.conv1", "layer3.0.conv2", "layer3.1.conv1", "layer3.1.conv2", "layer3.2.conv1"]
     elif args.m_name == 'vgg16':
         initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
                         'pruned_finetuned_mask_0.9953.pth')
         target_layers = ["features.10", "features.20", "features.24"]
-    elif args.m_name == 'alexnet':
+    elif args.m_name == 'effnet':
         initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
                         f'pruned_finetuned_mask_0.9953.pth')
         target_layers = ['features.3', 'features.6', 'features.8',
@@ -643,7 +643,7 @@ def main():
 
     regrow_per_iter = int(total_weights * args.regrow_step)
     # TODO
-    #num_iters = max(1, math.ceil((args.start_sparsity - args.target_sparsity) / args.regrow_step))
+    # num_iters = max(1, math.ceil((args.start_sparsity - args.target_sparsity) / args.regrow_step))
     num_iters = args.num_iters
 
     print(f"\n{'=' * 70}")
@@ -755,7 +755,7 @@ def main():
         current_model = best_model
 
         if iter_sp <= args.target_sparsity * 100 + 0.1:
-            print(f"  Target sparsity {args.target_sparsity * 100:.1f}% reached. Done.");
+            print(f"  Target sparsity {args.target_sparsity * 100:.1f}% reached. Done.")
             break
 
     # ── Final ─────────────────────────────────────────────────────────────────

@@ -740,7 +740,7 @@ def main():
     # Regrowth parameters
     parser.add_argument('--target_sparsity', type=float, default=0.0,
                        help='Target sparsity for reference model AND regrowth target (0.0 = pretrained, 0.95, 0.97, etc.)')
-    parser.add_argument('--start_sparsity', type=float, default=0.9903,
+    parser.add_argument('--start_sparsity', type=float, default=0.9953,
                        help='Starting sparsity (highly pruned model)')
     parser.add_argument('--starting_checkpoint', type=str, default='iterative',
                        choices=['oneshot', 'iterative'],
