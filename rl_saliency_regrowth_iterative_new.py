@@ -809,17 +809,17 @@ def get_sparsity(model):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name',   type=str,   default='resnet20')
+    parser.add_argument('--m_name',   type=str,   default='vgg16')
     parser.add_argument('--data_dir', type=str,   default='./data')
     parser.add_argument('--method',   type=str,   default='iterative')
 
     # Sparsity
     parser.add_argument('--start_sparsity',  type=float, default=0.9903)
-    parser.add_argument('--target_sparsity', type=float, default=0.98)
+    parser.add_argument('--target_sparsity', type=float, default=0.97)
     parser.add_argument('--num_iters',       type=int,   default=20)
 
     # RL
-    parser.add_argument('--num_epochs',        type=int,   default=300)
+    parser.add_argument('--num_epochs',        type=int,   default=1)
     parser.add_argument('--learning_rate',     type=float, default=3e-4)
     parser.add_argument('--hidden_size',       type=int,   default=64)
     parser.add_argument('--entropy_coef',      type=float, default=0.5)
