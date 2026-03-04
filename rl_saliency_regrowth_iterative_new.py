@@ -814,7 +814,7 @@ def main():
     parser.add_argument('--method',   type=str,   default='iterative')
 
     # Sparsity
-    parser.add_argument('--start_sparsity',  type=float, default=0.9903)
+    parser.add_argument('--start_sparsity',  type=float, default=0.9953)
     parser.add_argument('--target_sparsity', type=float, default=0.97)
     parser.add_argument('--num_iters',       type=int,   default=20)
 
@@ -840,7 +840,7 @@ def main():
     parser.add_argument('--ssim_threshold', type=float, default=-0.1,
                         help='Layers with feature-SSIM < this value enter the RL '
                              'search space each iteration. Feature-SSIM can go below -1.')
-    parser.add_argument('--ssim_num_batches', type=int, default=64,
+    parser.add_argument('--ssim_num_batches', type=int, default=128,
                         help='Batches used for feature-SSIM computation per iteration')
 
     # Regrowth
