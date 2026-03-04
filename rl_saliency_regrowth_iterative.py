@@ -66,7 +66,7 @@ class SaliencyComputer:
             inputs, labels = inputs.to(self.device), labels.to(self.device)
             self.model.zero_grad()
             loss = self.criterion(self.model(inputs), labels)
-            grads = torch.autograd.grad(loss, self.model.parameters(), create_graph=False)
+            grads = torch.autograd.grad(loss, self.model.parameters(), create_graph=False, allow_unused=True)
 
             for param, grad in zip(self.model.parameters(), grads):
                 if grad is None:
@@ -554,11 +554,11 @@ def main():
     parser.add_argument('--method', type=str, default="iterative")
 
     # Sparsity schedule
-    parser.add_argument('--start_sparsity', type=float, default=0.9953)
+    parser.add_argument('--start_sparsity', type=float, default=0.9903)
     parser.add_argument('--target_sparsity', type=float, default=0.98)
-    parser.add_argument('--regrow_step', type=float, default=0.003,
+    parser.add_argument('--regrow_step', type=float, default=0.001,
                         help='Fraction of total weights to regrow per iteration')
-    parser.add_argument('--num_iters', type=int, default=5)
+    parser.add_argument('--num_iters', type=int, default=20)
     # RL
     parser.add_argument('--num_epochs', type=int, default=300)
     parser.add_argument('--learning_rate', type=float, default=3e-4)
@@ -594,9 +594,11 @@ def main():
     # Architecture config
     if args.m_name == 'resnet20':
         initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
-                        'pruned_finetuned_mask_0.9953.pth')
-        target_layers = ["layer1.2.conv1", "layer2.1.conv1", "layer2.1.conv2", "layer2.2.conv1", "layer2.2.conv2",
-                         "layer3.0.conv1", "layer3.0.conv2", "layer3.1.conv1", "layer3.1.conv2", "layer3.2.conv1"]
+                        'pruned_finetuned_mask_0.9903.pth')
+        # target_layers = ["layer1.2.conv1", "layer2.1.conv1", "layer2.1.conv2", "layer2.2.conv1", "layer2.2.conv2",
+        #                  "layer3.0.conv1", "layer3.0.conv2", "layer3.1.conv1", "layer3.1.conv2", "layer3.2.conv1"]
+        target_layers = ['layer2.0.shortcut.0', 'layer2.1.conv2', 'layer2.2.conv1', 'layer3.0.conv1', 'layer3.0.conv2',
+                         'layer3.1.conv1', 'layer3.1.conv2', 'layer3.2.conv1']
     elif args.m_name == 'vgg16':
         initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
                         'pruned_finetuned_mask_0.9953.pth')
@@ -604,8 +606,8 @@ def main():
     elif args.m_name == 'effnet':
         initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
                         f'pruned_finetuned_mask_0.9953.pth')
-        target_layers = ['features.3', 'features.6', 'features.8',
-                         'features.10', 'classifier.1']
+        target_layers = ['layers.4.conv1', 'layers.4.conv2', 'layers.5.conv1', 'layers.5.conv3', 'layers.6.conv1',
+                         'layers.6.conv3', 'layers.8.conv1', 'layers.9.conv1', 'layers.9.conv2', 'layers.10.conv3']
     elif args.m_name == 'densenet':
         initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
                         f'pruned_finetuned_mask_0.9953.pth')
@@ -655,7 +657,7 @@ def main():
     # ── wandb (one run, all iterations) ──────────────────────────────────────
     run = wandb.init(
         project="ICCAD_saliency_iterative",
-        name=f"{args.m_name}_{args.start_sparsity:.3f}_to_{args.target_sparsity:.3f}",
+        name=f"{args.m_name}_{args.start_sparsity:.3f}_to_{args.target_sparsity:.3f}_0.1_from99.03",
         config=vars(args) | {"num_iters": num_iters},
     )
 
