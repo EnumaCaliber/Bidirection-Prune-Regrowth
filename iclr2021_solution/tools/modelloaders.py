@@ -3,6 +3,7 @@ import torch.optim.lr_scheduler as sched
 import torchvision.models as tmodels
 from functools import partial
 from iclr2021_solution.tools.models import *
+from models import *
 from iclr2021_solution.tools.pruners import prune_weights_reparam
 
 def model_and_opt_loader(model_string,DEVICE):
@@ -22,6 +23,22 @@ def model_and_opt_loader(model_string,DEVICE):
             "steps": 40000, # 40000 for iterative, 400000 for one-shot
             "scheduler": None
         }
+
+    elif model_string == 'shufflenetv2':
+        model = ShuffleNetV2(2).to(DEVICE)
+        amount = 0.4
+        batch_size = 100
+        opt_pre = {
+            "optimizer": partial(optim.AdamW,lr=0.0003),
+            "steps": 50000,
+            "scheduler": None
+        }
+        opt_post = {
+            "optimizer": partial(optim.AdamW,lr=0.0003),
+            "steps": 40000, # 40000 for iterative, 400000 for one-shot
+            "scheduler": None
+        }
+
     elif model_string == 'resnet20':
         model = ResNet20().to(DEVICE)
         amount = 0.985
@@ -149,20 +166,20 @@ def model_and_opt_loader(model_string,DEVICE):
             "steps": 400000, # 40000 for iterative, 400000 for one-shot
             "scheduler": None
         }
-    # elif model_string == 'googlenet':
-    #     model = GoogleNet().to(DEVICE)
-    #     amount = 0.98  # Moderate sparsity for Inception architecture
-    #     batch_size = 100
-    #     opt_pre = {
-    #         "optimizer": partial(optim.AdamW,lr=0.0003),
-    #         "steps": 50000,
-    #         "scheduler": None
-    #     }
-    #     opt_post = {
-    #         "optimizer": partial(optim.AdamW,lr=0.0003),
-    #         "steps": 40000,
-    #         "scheduler": None
-    #     }
+    elif model_string == 'googlenet':
+        model = GoogleNet().to(DEVICE)
+        amount = 0.98  # Moderate sparsity for Inception architecture
+        batch_size = 100
+        opt_pre = {
+            "optimizer": partial(optim.AdamW,lr=0.0003),
+            "steps": 50000,
+            "scheduler": None
+        }
+        opt_post = {
+            "optimizer": partial(optim.AdamW,lr=0.0003),
+            "steps": 40000,
+            "scheduler": None
+        }
     else:
         raise ValueError('Unknown model')
     prune_weights_reparam(model)

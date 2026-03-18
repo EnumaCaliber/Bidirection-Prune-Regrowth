@@ -12,7 +12,6 @@ import random
 from torch.distributions import Categorical
 from collections import deque
 from tqdm import tqdm
-import math
 from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 from utils.analysis_utils import (load_model_name, prune_weights_reparam, count_pruned_params)

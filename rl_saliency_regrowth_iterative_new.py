@@ -124,6 +124,42 @@ ITERATIVE_BASELINE_TABLES = {
         0.9932: 69.04,
         0.9953: 60.64,
     },
+
+    'googlenet': {
+        0.3:	92.73,
+        0.51:	93.21,
+        0.657:	93.53,
+        0.7599:	93.57,
+        0.8319:	93.47,
+        0.8824:	93.58,
+        0.9176:	93.41,
+        0.9424:	93.12,
+        0.9596:	92.7,
+        0.9718:	92.64,
+        0.9802:	92.07,
+        0.9862:	91.61,
+        0.9903:	90.82,
+        0.9932:	89.44,
+        0.9953:	87.8,
+    },
+    'shufflenetv2':{
+        0.3:	91.07,
+        0.51:	91.07,
+        0.657:	91.04,
+        0.7599:	91.39,
+        0.8319:	91.41,
+        0.8824:	91.54,
+        0.9176:	91.41,
+        0.9424:	91.38,
+        0.9596:	91.17,
+        0.9718:	91.16,
+        0.9802:	90.71,
+        0.9862:	90.08,
+        0.9903:	89.62,
+        0.9932:	88.59,
+        0.9953:	87.04,
+    }
+
 }
 
 
@@ -809,17 +845,17 @@ def get_sparsity(model):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name',   type=str,   default='vgg16')
+    parser.add_argument('--m_name',   type=str,   default='shufflenetv2')
     parser.add_argument('--data_dir', type=str,   default='./data')
     parser.add_argument('--method',   type=str,   default='iterative')
 
     # Sparsity
-    parser.add_argument('--start_sparsity',  type=float, default=0.9953)
+    parser.add_argument('--start_sparsity',  type=float, default=0.9903)
     parser.add_argument('--target_sparsity', type=float, default=0.97)
     parser.add_argument('--num_iters',       type=int,   default=20)
 
     # RL
-    parser.add_argument('--num_epochs',        type=int,   default=1)
+    parser.add_argument('--num_epochs',        type=int,   default=300)
     parser.add_argument('--learning_rate',     type=float, default=3e-4)
     parser.add_argument('--hidden_size',       type=int,   default=64)
     parser.add_argument('--entropy_coef',      type=float, default=0.5)
@@ -837,7 +873,7 @@ def main():
     parser.add_argument('--max_budget_frac', type=float, default=0.005)
 
     # SSIM layer selection
-    parser.add_argument('--ssim_threshold', type=float, default=-0.1,
+    parser.add_argument('--ssim_threshold', type=float, default=0,
                         help='Layers with feature-SSIM < this value enter the RL '
                              'search space each iteration. Feature-SSIM can go below -1.')
     parser.add_argument('--ssim_num_batches', type=int, default=128,
@@ -870,7 +906,7 @@ def main():
     # ── Initial checkpoint path (per model) ──────────────────────────────────
 
     initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
-                    f'pruned_finetuned_mask_0.9953.pth')
+                    f'pruned_finetuned_mask_0.9903.pth')
 
     # ── Pre-loaded baseline (per model) ──────────────────────────────────────
     assert args.m_name in ITERATIVE_BASELINE_TABLES, \

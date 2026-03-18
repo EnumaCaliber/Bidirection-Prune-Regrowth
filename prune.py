@@ -22,7 +22,7 @@ from iclr2021_solution.tools import *
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Prune')
 
-parser.add_argument('--m_name', type=str, default="effnet",
+parser.add_argument('--m_name', type=str, default="shufflenetv2",
                     help='Model name (e.g., resnet18, vgg16, etc.)')
 # desnet, effnet, resnet20, vgg16
 parser.add_argument('--pruner', type=str, default='lamp', help='pruning method')
@@ -103,7 +103,7 @@ else:
 for it in range(args.iter_start, args.iter_end + 1):
     print(f"Pruning for iteration {it}: METHOD: {args.pruner}")
     pruner(net, sparsity)
-    result_log = trainer(net, opt_post, train_loader, test_loader,patience=50)
+    result_log = trainer(net, opt_post, train_loader, test_loader,run = run, patience=50)
 
     # Append results to CSV
     with open(log_csv_path, 'a', newline='') as f:

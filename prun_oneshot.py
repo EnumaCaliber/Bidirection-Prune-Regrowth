@@ -22,7 +22,7 @@ from iclr2021_solution.tools import *
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Prune')
 
-parser.add_argument('--m_name', type=str, default="vgg16",
+parser.add_argument('--m_name', type=str, default="shufflenetv2",
                     help='Model name (e.g., resnet18, vgg16, etc.)')
 # desnet, effnet, resnet20, vgg16
 parser.add_argument('--pruner', type=str, default='lamp', help='pruning method')
@@ -30,7 +30,7 @@ parser.add_argument('--seed', type=int, default=42, help='random seed for reprod
 parser.add_argument('--m_prune', type=str, default='oneshot', help="oneshot and iterate")
 parser.add_argument('--iter_start', type=int, default=1, help='start iteration for pruning')
 parser.add_argument('--iter_end', type=int, default=1, help='end iteration for pruning')
-parser.add_argument('--oneshot', type=int, default=0.94, help='end iteration for pruning')
+parser.add_argument('--oneshot', type=int, default=0.99, help='end iteration for pruning')
 args = parser.parse_args()
 
 run = wandb.init(
@@ -104,6 +104,6 @@ for it in range(args.iter_start, args.iter_end + 1):
     formatted_mask = round(true_mask, 4)
 
 
-    target_path_mask = os.path.join(target_folder, f'pruned_oneshot_mask_{formatted_mask}_test.pth')
+    target_path_mask = os.path.join(target_folder, f'pruned_oneshot_mask_{formatted_mask}.pth')
     torch.save(net.state_dict(), target_path_mask)
 

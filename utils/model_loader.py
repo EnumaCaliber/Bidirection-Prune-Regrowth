@@ -33,6 +33,9 @@ def model_loader(model_string, DEVICE):
     elif model_string == 'googlenet':
         model = GoogLeNet().to(DEVICE)
 
+    elif model_string == 'shufflenetv2':
+        model = ShuffleNetV2(2).to(DEVICE)
+
     else:
         raise ValueError('Unknown model')
     # prune_weights_reparam(model)

@@ -20,6 +20,7 @@ def apply_saved_allocation(args):
     best_data = torch.load(args.allocation_path, map_location=device,weights_only=False)
 
     allocation = best_data['allocation']
+    print(allocation)
     best_reward = best_data['reward']
     epoch = best_data['epoch']
 
@@ -110,19 +111,19 @@ def apply_saved_allocation(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name', type=str, default='vgg16')
+    parser.add_argument('--m_name', type=str, default='shufflenetv2')
     parser.add_argument('--data_dir', type=str, default='./data')
     parser.add_argument('--allocation_path', type=str,
-                        default='./rl_saliency_checkpoints/vgg16/oneshot/0.96/best_saliency_allocation.pth')
+                        default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96/best_saliency_allocation.pth')
     parser.add_argument('--pruned_model_path', type=str,
-                        default='./vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth')
+                        default='./shufflenetv2/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.98.pth')
     parser.add_argument('--pretrained_model_path', type=str,
-                        default='./vgg16/checkpoint')
+                        default='./shufflenetv2/checkpoint')
     parser.add_argument('--init_strategy', type=str, default='zero',
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)
     parser.add_argument('--save_path', type=str,
-                        default='./rl_saliency_checkpoints/vgg16/oneshot/0.96/regrown_model.pth')
+                        default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96/regrown_model.pth')
     args = parser.parse_args()
 
     apply_saved_allocation(args)

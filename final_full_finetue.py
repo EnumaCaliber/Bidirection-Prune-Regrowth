@@ -11,14 +11,33 @@ from transformers import get_cosine_schedule_with_warmup
 import torch.nn as nn
 import torch.optim as optim
 from utils.analysis_utils import (prune_weights_reparam)
+import random
+import numpy as np
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--m_name', type=str, default='vgg16')
-parser.add_argument('--sparsity', default=0.98)
+parser.add_argument('--m_name', type=str, default='shufflenetv2')
+parser.add_argument('--sparsity', default=0.96)
 parser.add_argument('--model_path', type=str,
-                    default='./rl_saliency_checkpoints/vgg16/oneshot/0.99/baseline_exceeded_epoch26_acc0.9067.pth')  # 改为 model_path
+                    #0.8399
+                    default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96/regrown_model.pth')  # 改为 model_path
 args = parser.parse_args()
 
+def set_seed(seed=42):
+    """Set random seed for reproducibility"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    def seed_worker(worker_id):
+        worker_seed = torch.initial_seed() % 2 ** 32
+        np.random.seed(worker_seed)
+        random.seed(worker_seed)
+
+    return seed_worker
 
 def full_finetune(model, train_loader, test_loader, device,
                   epochs=1500, lr=0.0003, save_path=None, patience=30):
@@ -83,7 +102,7 @@ def full_finetune(model, train_loader, test_loader, device,
         if (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch + 1}/{epochs} | Test Acc: {test_accuracy:.2f}% | Best: {best_accuracy:.2f}%")
         if (epoch + 1) % 50 == 0:
-            torch.save(model.state_dict(), f'./rl_saliency_checkpoints/vgg16/oneshot/0.99fullfinetune/epoch{epoch}.pth')
+            torch.save(model.state_dict(), f'./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96fullfinetune/epoch{epoch}.pth')
 
 
         if epochs_without_improvement >= patience:
@@ -95,13 +114,15 @@ def full_finetune(model, train_loader, test_loader, device,
 
 
 # Main
+set_seed()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 train_loader, _, test_loader = data_loader(data_dir='./data')
 
 model_99 = model_loader(args.m_name, device)
 prune_weights_reparam(model_99)
-checkpoint_99 = torch.load(args.model_path,weights_only=False).get('model_state_dict')
+checkpoint_99 = torch.load(args.model_path,weights_only=False)
 model_99.load_state_dict(checkpoint_99)
+
 # model_99.load_state_dict(checkpoint_99)
 
 # for name, module in model_99.named_modules():
@@ -119,7 +140,7 @@ final_acc = full_finetune(
     device=device,
     epochs=400,
     lr=0.0003,
-    save_path=f"./rl_saliency_checkpoints/vgg16/oneshot/0.99fullfinetune/final_model_sparsity.pth",
+    save_path=f"./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96fullfinetune/final_model_{args.sparsity}.pth",
     patience=50,
 )
 print(f"\n{'=' * 60}")

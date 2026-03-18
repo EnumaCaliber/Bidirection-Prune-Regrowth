@@ -2,11 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
 
-import torchvision
-import torchvision.transforms as transforms
 
 import os
 import argparse
@@ -23,7 +19,7 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
-parser.add_argument('--m_name',type=str, default= "densenet",
+parser.add_argument('--m_name',type=str, default= "shufflenetv2",
                     help='Model name (e.g., resnet18, vgg16, etc.)')
 parser.add_argument('--pruner', type=str, help='pruning method')
 parser.add_argument('--iter_start', type=int, default=1, help='start iteration for pruning')

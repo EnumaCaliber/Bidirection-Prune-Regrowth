@@ -10,8 +10,9 @@ from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--m_name', type=str, default='vgg16')
-parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/vgg16/iterative/iter1_sp0.9893/best_model_epoch3_acc90.70.pth0')
+parser.add_argument('--m_name', type=str, default='shufflenetv2')
+parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96fullfinetune/final_model_0.96.pth')
+# parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/effnet/oneshot/0.94fullfinetune/final_model_0.94.pth')
 #parser.add_argument('--model_path', type=str, default='./vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.99.pth')
 parser.add_argument('--data_dir', type=str, default='./data')
 args = parser.parse_args()
@@ -24,7 +25,7 @@ def get_sparsity(sd):
 
 
 def load_model(ckpt_path, model_name, device):
-    sd = torch.load(ckpt_path, map_location=device)['model_state_dict']
+    sd = torch.load(ckpt_path, map_location=device)
 
     merged, done = {}, set()
     for k in sd:
@@ -61,6 +62,7 @@ _, _, test_loader = data_loader(data_dir=args.data_dir)
 
 ckpt_path = Path(args.model_path)
 model, sd = load_model(ckpt_path, args.m_name, device)
+# model, sd = model.to(device), sd.to(device)
 sparsity = get_sparsity(sd)
 acc, loss = evaluate(model, test_loader, device)
 

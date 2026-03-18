@@ -157,7 +157,7 @@ class SaliencyComputer:
 
             # Compute gradients using torch.autograd.grad (works with non-leaf tensors)
             # This is needed because with pruning, module.weight is not a leaf tensor
-            grads = torch.autograd.grad(loss, self.model.parameters(), create_graph=False)
+            grads = torch.autograd.grad(loss, self.model.parameters(), create_graph=False,allow_unused=True)
 
             # Accumulate gradients for target layers
             # Match parameters by identity (same approach as saliency_analysis.py)

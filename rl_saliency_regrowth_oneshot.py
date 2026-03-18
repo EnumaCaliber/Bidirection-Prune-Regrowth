@@ -832,9 +832,6 @@ class RegrowthPolicyGradient:
             total = 0
             with torch.no_grad():
                 for batch_idx, (inputs, targets) in enumerate(self.test_loader):
-                    # TODO
-                    if batch_idx >= 20:
-                        break
                     inputs, targets = inputs.to(self.DEVICE), targets.to(self.DEVICE)
                     outputs = model(inputs)
                     _, predicted = outputs.max(1)
