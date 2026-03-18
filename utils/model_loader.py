@@ -1,4 +1,6 @@
 from models import *
+from models.vgg_tiny_imagenet import VGGTinyImageNet
+
 
 def model_loader(model_string, DEVICE):
     if DEVICE == None:
@@ -35,6 +37,11 @@ def model_loader(model_string, DEVICE):
 
     elif model_string == 'shufflenetv2':
         model = ShuffleNetV2(2).to(DEVICE)
+
+    elif model_string == 'vgg16inyImageNet':
+        model = VGGTinyImageNet("VGG16",num_classes=200).to(DEVICE)
+
+
 
     else:
         raise ValueError('Unknown model')
