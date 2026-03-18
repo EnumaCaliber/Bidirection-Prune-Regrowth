@@ -41,7 +41,8 @@ def model_loader(model_string, DEVICE):
     elif model_string == 'vgg16inyImageNet':
         model = VGGTinyImageNet("VGG16",num_classes=200).to(DEVICE)
 
-
+    elif model_string == 'effnetTinyImageNet':
+        model = EfficientNetB0TinyImageNet(num_classes=200).to(DEVICE)
 
     else:
         raise ValueError('Unknown model')
