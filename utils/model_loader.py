@@ -38,7 +38,7 @@ def model_loader(model_string, DEVICE):
     elif model_string == 'shufflenetv2':
         model = ShuffleNetV2(2).to(DEVICE)
 
-    elif model_string == 'vgg16inyImageNet':
+    elif model_string == 'vgg16TinyImageNet':
         model = VGGTinyImageNet("VGG16",num_classes=200).to(DEVICE)
 
     elif model_string == 'effnetTinyImageNet':

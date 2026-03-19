@@ -5,6 +5,8 @@ from functools import partial
 from iclr2021_solution.tools.models import *
 from models import *
 from iclr2021_solution.tools.pruners import prune_weights_reparam
+from models.vgg_tiny_imagenet import VGGTinyImageNet
+
 
 def model_and_opt_loader(model_string,DEVICE):
     if DEVICE == None:
@@ -21,6 +23,36 @@ def model_and_opt_loader(model_string,DEVICE):
         opt_post = {
             "optimizer": partial(optim.AdamW,lr=0.0003),
             "steps": 40000, # 40000 for iterative, 400000 for one-shot
+            "scheduler": None
+        }
+
+    elif model_string == 'effnetTinyImageNet':
+        model = EfficientNetB0TinyImageNet(num_classes=200).to(DEVICE)
+        amount = 0.4
+        batch_size = 100
+        opt_pre = {
+            "optimizer": partial(optim.AdamW,lr=0.0003),
+            "steps": 50000,
+            "scheduler": None
+        }
+        opt_post = {
+            "optimizer": partial(optim.AdamW,lr=0.0003),
+            "steps": 40000, # 40000 for iterative, 400000 for one-shot
+            "scheduler": None
+        }
+
+    elif model_string == 'vgg16TinyImageNet':
+        model = VGGTinyImageNet("VGG16",num_classes=200).to(DEVICE)
+        amount = 0.4
+        batch_size = 100
+        opt_pre = {
+            "optimizer": partial(optim.AdamW, lr=0.0003),
+            "steps": 50000,
+            "scheduler": None
+        }
+        opt_post = {
+            "optimizer": partial(optim.AdamW, lr=0.0003),
+            "steps": 40000,  # 40000 for iterative, 400000 for one-shot
             "scheduler": None
         }
 
