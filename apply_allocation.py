@@ -114,7 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--m_name', type=str, default='shufflenetv2')
     parser.add_argument('--data_dir', type=str, default='./data')
     parser.add_argument('--allocation_path', type=str,
-                        default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96/best_saliency_allocation.pth')
+                        default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.94/best_saliency_allocation.pth')
     parser.add_argument('--pruned_model_path', type=str,
                         default='./shufflenetv2/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.98.pth')
     parser.add_argument('--pretrained_model_path', type=str,
@@ -123,7 +123,7 @@ if __name__ == '__main__':
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)
     parser.add_argument('--save_path', type=str,
-                        default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96/regrown_model.pth')
+                        default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.94/regrown_model.pth')
     args = parser.parse_args()
 
     apply_saved_allocation(args)

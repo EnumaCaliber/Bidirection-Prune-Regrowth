@@ -11,7 +11,7 @@ from utils.data_loader import data_loader
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='shufflenetv2')
-parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96fullfinetune/final_model_0.96.pth')
+parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.94fullfinetune/final_model_0.94.pth')
 # parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/effnet/oneshot/0.94fullfinetune/final_model_0.94.pth')
 #parser.add_argument('--model_path', type=str, default='./vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.99.pth')
 parser.add_argument('--data_dir', type=str, default='./data')

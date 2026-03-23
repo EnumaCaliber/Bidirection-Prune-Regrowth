@@ -8,7 +8,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Evaluate Top-1 & Top-5 Accuracy')
 parser.add_argument('--m_name',      type=str, default="effnetTinyImageNet")
-parser.add_argument('--ckpt_path',   type=str, default="./effnet/checkpoint/pretrain_effnetTinyImageNet_ckpt.pth")
+parser.add_argument('--ckpt_path',   type=str, default="./effnetTinyImageNet/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.93.pth")
 parser.add_argument('--data_dir',    type=str, default='./data')
 parser.add_argument('--batch_size',  type=int, default=128)
 parser.add_argument('--num_workers', type=int, default=15)
@@ -41,7 +41,7 @@ _, _, test_loader = data_loader_tiny_imagenet(
 print(f'==> Loading model {args.m_name} from {args.ckpt_path}')
 net = model_loader(args.m_name, device)
 checkpoint = torch.load(args.ckpt_path, map_location=device)
-net.load_state_dict(checkpoint['net'])
+net.load_state_dict(checkpoint)
 net.eval()
 print(f'Checkpoint from epoch {checkpoint.get("epoch", "?")} '
       f'(saved val acc: {checkpoint.get("acc", "?"):.2f}%)')

@@ -16,10 +16,10 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='shufflenetv2')
-parser.add_argument('--sparsity', default=0.96)
+parser.add_argument('--sparsity', default=0.94)
 parser.add_argument('--model_path', type=str,
                     #0.8399
-                    default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96/regrown_model.pth')  # 改为 model_path
+                    default='./rl_saliency_checkpoints/shufflenetv2/oneshot/0.94/regrown_model.pth')  # 改为 model_path
 args = parser.parse_args()
 
 def set_seed(seed=42):
@@ -102,7 +102,7 @@ def full_finetune(model, train_loader, test_loader, device,
         if (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch + 1}/{epochs} | Test Acc: {test_accuracy:.2f}% | Best: {best_accuracy:.2f}%")
         if (epoch + 1) % 50 == 0:
-            torch.save(model.state_dict(), f'./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96fullfinetune/epoch{epoch}.pth')
+            torch.save(model.state_dict(), f'./rl_saliency_checkpoints/shufflenetv2/oneshot/0.94fullfinetune/epoch{epoch}.pth')
 
 
         if epochs_without_improvement >= patience:
@@ -140,7 +140,7 @@ final_acc = full_finetune(
     device=device,
     epochs=400,
     lr=0.0003,
-    save_path=f"./rl_saliency_checkpoints/shufflenetv2/oneshot/0.96fullfinetune/final_model_{args.sparsity}.pth",
+    save_path=f"./rl_saliency_checkpoints/shufflenetv2/oneshot/0.94fullfinetune/final_model_{args.sparsity}.pth",
     patience=50,
 )
 print(f"\n{'=' * 60}")
