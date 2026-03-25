@@ -92,14 +92,14 @@ if args.m_prune == 'iterate':
     sparsity = 0.3
     opt_post = {
         "optimizer": partial(optim.AdamW, lr=0.0003),
-        "steps": 40*313,  # 40000 for iterative, 400000 for one-shot
+        "steps": 40*702,  # 40000 for iterative, 400000 for one-shot
         "scheduler": None
     }
 else:
     sparsity = args.oneshot
     opt_post = {
         "optimizer": partial(optim.AdamW, lr=0.0003),
-        "steps": 400*313,  # 40000 for iterative, 400000 for one-shot
+        "steps": 400*702,  # 40000 for iterative, 400000 for one-shot
         "scheduler": None
     }
 
