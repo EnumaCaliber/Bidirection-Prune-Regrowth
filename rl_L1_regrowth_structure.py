@@ -359,6 +359,55 @@ class TaylorChannelScorer:
         return channel_scores
 
 
+def apply_config_with_weight_transfer(current_model, dense_model,
+                                       new_config, original_channels,
+                                       example_inputs):
+    """
+    关键函数：在当前模型基础上加通道，而不是从 dense 重建
+    ─────────────────────────────────────────────────────
+    已有通道 → 从 current_model 复制（保留 finetune 成果）
+    新增通道 → 从 dense_model 补入（有合理初始值）
+    """
+    # Step1: 按新 config 从 dense 重建结构
+    new_model = apply_config(dense_model, new_config,
+                             original_channels, example_inputs)
+
+    # Step2: 逐层迁移权重
+    cur_mods  = dict(current_model.named_modules())
+    with torch.no_grad():
+        for name, new_m in new_model.named_modules():
+            if not isinstance(new_m, nn.Conv2d):
+                continue
+            cur_m = cur_mods.get(name)
+            if cur_m is None:
+                continue
+
+            # out_channels 和 in_channels 都可能不同
+            n_out = min(new_m.weight.shape[0], cur_m.weight.shape[0])
+            n_in  = min(new_m.weight.shape[1], cur_m.weight.shape[1])
+
+            # 已有通道：从 current_model 复制（保留 finetune 权重）
+            new_m.weight[:n_out, :n_in] = cur_m.weight[:n_out, :n_in].data
+
+            if new_m.bias is not None and cur_m.bias is not None:
+                new_m.bias[:n_out] = cur_m.bias[:n_out].data
+
+        # BN 层同样迁移
+        for name, new_m in new_model.named_modules():
+            if not isinstance(new_m, nn.BatchNorm2d):
+                continue
+            cur_m = cur_mods.get(name)
+            if cur_m is None:
+                continue
+            n = min(new_m.num_features, cur_m.num_features)
+            new_m.weight[:n]       = cur_m.weight[:n].data
+            new_m.bias[:n]         = cur_m.bias[:n].data
+            new_m.running_mean[:n] = cur_m.running_mean[:n].data
+            new_m.running_var[:n]  = cur_m.running_var[:n].data
+
+    return new_model
+
+
 def select_channels_by_taylor(channel_scores, pruned_ch_indices,
                                layer_name, n_restore):
     """从被剪掉的通道里按 Taylor score 选 top-n"""
@@ -701,10 +750,13 @@ class StructuredRegrowthPG:
                 print(f"    {lname}: +{len(chs)} ch "
                       f"(taylor top3: {chs[:3]})")
 
-        # ── 从 dense 重建子网 ─────────────────────────────────────────────────
-        new_model = apply_config(
-            self.dense_model, new_config,
-            self.original_channels, self.example_inputs
+        # ── 权重迁移重建子网（保留 finetune 成果）────────────────────────────
+        new_model = apply_config_with_weight_transfer(
+            current_model=self.model_sparse,   # 已 finetune 的当前模型
+            dense_model=self.dense_model,      # 新通道权重来源
+            new_config=new_config,
+            original_channels=self.original_channels,
+            example_inputs=self.example_inputs,
         ).to(self.DEVICE)
 
         # ── finetune ──────────────────────────────────────────────────────────
@@ -792,9 +844,9 @@ def main():
     parser.add_argument('--method',   type=str,   default='structured_iterative')
 
     # Sparsity
-    parser.add_argument('--start_sp',    type=float, default=0.7,
+    parser.add_argument('--start_sp',    type=float, default=0.874,
                         help='起始 channel sparsity（对应已剪好的模型）')
-    parser.add_argument('--target_sp',   type=float, default=0.3,
+    parser.add_argument('--target_sp',   type=float, default=0.833,
                         help='目标 channel sparsity')
     parser.add_argument('--num_iters',   type=int,   default=20)
 
@@ -821,7 +873,7 @@ def main():
     parser.add_argument('--taylor_batches', type=int, default=10)
 
     # Finetune
-    parser.add_argument('--finetune_epochs', type=int, default=5)
+    parser.add_argument('--finetune_epochs', type=int, default=40)
 
     # Early stopping
     parser.add_argument('--early_stop_patience',  type=int,   default=40)
