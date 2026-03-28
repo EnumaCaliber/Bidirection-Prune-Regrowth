@@ -20,11 +20,11 @@ parser.add_argument('--seed',        type=int,   default=42)
 parser.add_argument('--pruner',      type=str,   default='l1',
                     choices=['l1', 'lamp', 'taylor'])
 parser.add_argument('--target_sp',   type=float, default=0.99,
-                    help='最终目标 channel sparsity')
+                    help='channel sparsity')
 parser.add_argument('--iterative_steps', type=int, default=25,
-                    help='迭代步数（GMP核心）')
+                    help='')
 parser.add_argument('--finetune_steps',  type=int, default=40*313,
-                    help='每步 finetune steps')
+                    help='')
 args = parser.parse_args()
 
 run = wandb.init(
