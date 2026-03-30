@@ -150,12 +150,11 @@ def eval_single(ckpt_path, dense_model, original_channels,
 def main():
     parser = argparse.ArgumentParser(description='Eval structured pruned models')
     parser.add_argument('--ckpt',    type=str,
-                        default="./structured_rl_ckpts/vgg16/structured_iterative/iter0_sp0.8736/"
-                                "best_model_rwd+0.85pp.pth",
+                        default=None,
                         help='单个 checkpoint 路径')
-    parser.add_argument('--dir',     type=str, default=None,
+    parser.add_argument('--dir',     type=str, default="./effnet/ckpt_structured_iterative",
                         help='目录，自动搜索所有 .pth 文件')
-    parser.add_argument('--m_name',  type=str, default='vgg16',
+    parser.add_argument('--m_name',  type=str, default='effnet',
                         help='模型名，用于加载 dense 计算稀疏度')
     parser.add_argument('--data_dir',type=str, default='./data')
     parser.add_argument('--verbose', action='store_true',
@@ -213,7 +212,7 @@ def main():
         if r:
             results.append(r)
             print(f"  Acc={r['acc']:.2f}%  "
-                  f"ChannelSparsity={r['ch_sparsity']:.4f} ({r['ch_sparsity']*100:.1f}%)  "
+                  f"ChannelSparsity={r['ch_sparsity']:.4f} ({r['ch_sparsity']*100:.4f}%)  "
                   f"Params={r['params_M']:.2f}M")
 
     if not results:

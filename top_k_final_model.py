@@ -10,7 +10,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Evaluate Top-1 & Top-5 Accuracy')
 parser.add_argument('--m_name',      type=str, default="effnetTinyImageNet")
-parser.add_argument('--ckpt_path',   type=str, default="./effnetTinyImageNet/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.995.pth")
+parser.add_argument('--ckpt_path',   type=str, default="./effnetTinyImageNet/checkpoint/pretrain_effnetTinyImageNet_ckpt.pth")
 parser.add_argument('--data_dir',    type=str, default='./data')
 parser.add_argument('--batch_size',  type=int, default=128)
 parser.add_argument('--num_workers', type=int, default=15)
@@ -36,7 +36,7 @@ def get_sparsity(sd):
 
 # ── 模型加载（合并 _orig * _mask）────────────────────────────────────────────
 def load_model(ckpt_path, model_name, device):
-    sd = torch.load(ckpt_path, map_location=device)
+    sd = torch.load(ckpt_path, map_location=device)['net']
 
     merged, done = {}, set()
     for k in sd:

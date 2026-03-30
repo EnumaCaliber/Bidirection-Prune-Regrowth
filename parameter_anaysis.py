@@ -2,8 +2,8 @@ import torch
 from utils.model_loader import model_loader
 
 MODELS = {
-    "vgg16": {
-        "pretrained": "vgg16/checkpoint/pretrain_vgg16_ckpt.pth"
+    "shufflenetv2": {
+        "pretrained": "shufflenetv2/checkpoint/pretrain_shufflenetv2_ckpt.pth"
     }
 }
 
@@ -31,5 +31,5 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 统计pretrained模型
-    model = load_pretrained(MODELS["vgg16"]["pretrained"], device, "vgg16")
+    model = load_pretrained(MODELS["shufflenetv2"]["pretrained"], device, "shufflenetv2")
     count_params(model)
