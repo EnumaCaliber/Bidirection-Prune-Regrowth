@@ -150,9 +150,9 @@ def eval_single(ckpt_path, dense_model, original_channels,
 def main():
     parser = argparse.ArgumentParser(description='Eval structured pruned models')
     parser.add_argument('--ckpt',    type=str,
-                        default=None,
+                        default="./structured_rl_ckpts/effnet/structured_iterative/iter0_sp0.8715/best_model_rwd+2.67pp.pth",
                         help='单个 checkpoint 路径')
-    parser.add_argument('--dir',     type=str, default="./effnet/ckpt_structured_iterative",
+    parser.add_argument('--dir',     type=str, default=None,
                         help='目录，自动搜索所有 .pth 文件')
     parser.add_argument('--m_name',  type=str, default='effnet',
                         help='模型名，用于加载 dense 计算稀疏度')
