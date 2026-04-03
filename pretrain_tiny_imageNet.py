@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser(description='PyTorch Tiny ImageNet Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
-parser.add_argument('--m_name', type=str, default="effnetTinyImageNet",
+parser.add_argument('--m_name', type=str, default="shufflenetv2TinyImageNet",
                     help='Model name (e.g., resnet18, vgg16, etc.)')
 parser.add_argument('--pruner', type=str, help='pruning method')
 parser.add_argument('--iter_start', type=int, default=1)

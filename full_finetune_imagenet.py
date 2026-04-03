@@ -12,14 +12,20 @@ import torch.nn as nn
 import torch.optim as optim
 from utils.analysis_utils import (prune_weights_reparam)
 import random
+from utils.data_loader_tiny_imagenet import data_loader_tiny_imagenet
 import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='vgg16TinyImageNet')
 parser.add_argument('--sparsity', default=0.97)
 parser.add_argument('--model_path', type=str,
-                    #0.8399
-                    default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97/regrown_model.pth')  # 改为 model_path
+                    default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97/regrown_model.pth')
+parser.add_argument('--data_dir', type=str, default='./data')
+parser.add_argument('--batch_size', type=int, default=128)
+parser.add_argument('--num_workers', type=int, default=15)
+parser.add_argument('--val_split', type=float, default=0.1)
+parser.add_argument('--seed', type=int, default=42)
+# 改为 model_path
 args = parser.parse_args()
 
 def set_seed(seed=42):
@@ -116,7 +122,12 @@ def full_finetune(model, train_loader, test_loader, device,
 # Main
 set_seed()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-train_loader, _, test_loader = data_loader(data_dir='./data')
+train_loader, _, test_loader = data_loader_tiny_imagenet(
+    data_dir=args.data_dir,
+    val_split=args.val_split,
+    batch_size=args.batch_size,
+    num_workers=args.num_workers,
+)
 
 model_99 = model_loader(args.m_name, device)
 prune_weights_reparam(model_99)
