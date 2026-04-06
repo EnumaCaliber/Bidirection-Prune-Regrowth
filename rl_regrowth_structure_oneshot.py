@@ -2,15 +2,8 @@
 Structured RL-based One-Shot Regrowth
 ======================================
 One-shot version of the structured regrowth pipeline.
-Adapted from the unstructured oneshot RL regrowth (right side),
-using structured pruning helpers from the iterative structured version (left side).
-
-Key design:
-- SSIM selects which layers enter the search space
-- Taylor scoring ranks pruned channels for restoration
-- LSTM controller (policy gradient) decides budget + per-layer allocation
-- apply_config_with_weight_transfer rebuilds model (no mask flipping)
-- Single outer iteration (one-shot), no iterative regrowth loop
+Reward = accuracy - fixed threshold (no baseline interpolation).
+Budget controlled by --sparsity_delta (e.g. 0.025 = drop sparsity 2.5pp).
 """
 
 import torch
@@ -50,56 +43,7 @@ def set_seed(seed=42):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Baseline Table + Interpolator  (same as iterative structured version)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-ONESHOT_BASELINE_TABLES = {
-    'vgg16': {
-        0.1:  92.80,
-        0.2:  92.50,
-        0.3:  92.20,
-        0.4:  91.80,
-        0.5:  91.10,
-        0.6:  90.20,
-        0.7:  89.00,
-        0.8:  86.50,
-        0.9:  80.00,
-    },
-    'effnet': {
-        0.1:  89.50,
-        0.2:  89.20,
-        0.3:  88.90,
-        0.4:  88.50,
-        0.5:  87.80,
-        0.6:  86.50,
-        0.7:  84.00,
-        0.8:  79.00,
-        0.9:  65.00,
-    },
-}
-
-
-class BaselineInterpolator:
-    def __init__(self, table: dict):
-        self.points = {float(k): float(v) for k, v in table.items()}
-        pts = sorted(self.points.items())
-        print(f"  [Baseline] {len(pts)} pts: sp {pts[0][0]:.3f} → {pts[-1][0]:.3f}")
-
-    def get_baseline_acc(self, sparsity: float) -> float:
-        pts = sorted(self.points.items())
-        if sparsity <= pts[0][0]:  return pts[0][1]
-        if sparsity >= pts[-1][0]: return pts[-1][1]
-        for i in range(len(pts) - 1):
-            s1, a1 = pts[i]
-            s2, a2 = pts[i + 1]
-            if s1 <= sparsity <= s2:
-                t = (sparsity - s1) / (s2 - s1 + 1e-12)
-                return a1 + t * (a2 - a1)
-        return pts[-1][1]
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Structured Pruning Helpers  (from iterative structured version)
+# Structured Pruning Helpers
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_original_channels(dense_model):
@@ -124,7 +68,6 @@ def compute_channel_sparsity(model, original_channels):
 
 
 def get_target_layers(dense_model, pruned_model):
-    """Layers where out_channels was reduced by structured pruning."""
     target_layers = []
     d_mods = dict(dense_model.named_modules())
     for name, p_m in pruned_model.named_modules():
@@ -137,7 +80,6 @@ def get_target_layers(dense_model, pruned_model):
 
 
 def get_layer_capacities(dense_model, pruned_model, target_layers):
-    """Number of channels that can be restored per layer."""
     d_mods = dict(dense_model.named_modules())
     p_mods = dict(pruned_model.named_modules())
     caps = []
@@ -151,7 +93,6 @@ def get_layer_capacities(dense_model, pruned_model, target_layers):
 
 
 def get_pruned_channel_indices(dense_model, pruned_model, target_layers):
-    """Find which channel indices were physically removed in each layer."""
     pruned_indices = {}
     d_mods = dict(dense_model.named_modules())
     p_mods = dict(pruned_model.named_modules())
@@ -179,7 +120,6 @@ def get_pruned_channel_indices(dense_model, pruned_model, target_layers):
 
 
 def apply_config(dense_model, config, original_channels, example_inputs):
-    """Rebuild a structured subnetwork from dense model according to config."""
     model = copy.deepcopy(dense_model)
     pruning_ratio_dict = {}
     for name, module in model.named_modules():
@@ -203,16 +143,10 @@ def apply_config(dense_model, config, original_channels, example_inputs):
 def apply_config_with_weight_transfer(current_model, dense_model,
                                       new_config, original_channels,
                                       example_inputs):
-    """
-    Rebuild subnetwork with weight transfer:
-    - Existing channels  → copied from current_model (keeps finetuned weights)
-    - New (regrown) channels → initialized from dense_model
-    """
     new_model = apply_config(dense_model, new_config, original_channels, example_inputs)
 
     cur_mods = dict(current_model.named_modules())
     with torch.no_grad():
-        # Conv weights
         for name, new_m in new_model.named_modules():
             if not isinstance(new_m, nn.Conv2d):
                 continue
@@ -225,7 +159,6 @@ def apply_config_with_weight_transfer(current_model, dense_model,
             if new_m.bias is not None and cur_m.bias is not None:
                 new_m.bias[:n_out] = cur_m.bias[:n_out].data
 
-        # BN stats
         for name, new_m in new_model.named_modules():
             if not isinstance(new_m, nn.BatchNorm2d):
                 continue
@@ -242,7 +175,7 @@ def apply_config_with_weight_transfer(current_model, dense_model,
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SSIM Layer Selector  (unchanged from iterative structured version)
+# SSIM Layer Selector
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class SSIMLayerSelector:
@@ -259,7 +192,7 @@ class SSIMLayerSelector:
             feats_pre  = ext_pre.extract_block_features(data_loader_ref,  num_batches=num_batches)
             feats_spar = ext_spar.extract_block_features(data_loader_ref, num_batches=num_batches)
 
-        ssim_raw  = compute_block_ssim(feats_pre, feats_spar)
+        ssim_raw   = compute_block_ssim(feats_pre, feats_spar)
         block_ssim = ssim_raw.get('all_layers', {})
 
         ssim_dict, selected = {}, []
@@ -275,7 +208,7 @@ class SSIMLayerSelector:
             print(f"    {n}: {s:+.4f}{flag}")
 
         if not selected:
-            worst   = min(ssim_dict, key=ssim_dict.get)
+            worst    = min(ssim_dict, key=ssim_dict.get)
             selected = [worst]
             print(f"  Fallback → {worst} ({ssim_dict[worst]:+.4f})")
 
@@ -284,7 +217,7 @@ class SSIMLayerSelector:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Taylor Channel Scorer  (unchanged from iterative structured version)
+# Taylor Channel Scorer
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TaylorChannelScorer:
@@ -307,12 +240,11 @@ class TaylorChannelScorer:
         sparse_model.eval()
 
         d_mods         = dict(self.dense_model.named_modules())
-        p_mods         = dict(sparse_model.named_modules())
         channel_scores = {}
 
         for layer_name in target_layers:
             d_m = d_mods.get(layer_name)
-            p_m = p_mods.get(layer_name)
+            p_m = dict(sparse_model.named_modules()).get(layer_name)
 
             if d_m is None or p_m is None or not isinstance(d_m, nn.Conv2d):
                 channel_scores[layer_name] = {}
@@ -321,9 +253,9 @@ class TaylorChannelScorer:
                 channel_scores[layer_name] = {}
                 continue
 
-            p_grad    = p_m.weight.grad.detach()   # [C_pruned, C_in, k, k]
-            d_weight  = d_m.weight.detach()         # [C_dense,  C_in, k, k]
-            mean_grad = p_grad.mean(dim=0)          # [C_in, k, k]
+            p_grad    = p_m.weight.grad.detach()
+            d_weight  = d_m.weight.detach()
+            mean_grad = p_grad.mean(dim=0)
 
             scores = {}
             for ch_idx in range(d_m.out_channels):
@@ -339,8 +271,8 @@ class TaylorChannelScorer:
 
 
 def select_channels_by_taylor(channel_scores, pruned_ch_indices, layer_name, n_restore):
-    all_scores  = channel_scores.get(layer_name, {})
-    pruned_chs  = pruned_ch_indices.get(layer_name, [])
+    all_scores = channel_scores.get(layer_name, {})
+    pruned_chs = pruned_ch_indices.get(layer_name, [])
     if not all_scores or not pruned_chs or n_restore == 0:
         return []
     candidates = {ch: all_scores[ch] for ch in pruned_chs if ch in all_scores}
@@ -351,25 +283,25 @@ def select_channels_by_taylor(channel_scores, pruned_ch_indices, layer_name, n_r
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# LSTM Controller  (same architecture as both versions)
+# LSTM Controller
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class RegrowthAgent(nn.Module):
     def __init__(self, budget_space_size, alloc_space_size,
                  hidden_size, context_dim, device='cuda'):
         super().__init__()
-        self.DEVICE      = device
-        self.nhid        = hidden_size
-        self.input_dim   = max(budget_space_size, alloc_space_size)
+        self.DEVICE    = device
+        self.nhid      = hidden_size
+        self.input_dim = max(budget_space_size, alloc_space_size)
 
-        self.lstm            = nn.LSTMCell(self.input_dim + context_dim, hidden_size)
-        self.budget_decoder  = nn.Linear(hidden_size, budget_space_size)
-        self.alloc_decoder   = nn.Linear(hidden_size, alloc_space_size)
-        self.hidden          = self.init_hidden()
+        self.lstm           = nn.LSTMCell(self.input_dim + context_dim, hidden_size)
+        self.budget_decoder = nn.Linear(hidden_size, budget_space_size)
+        self.alloc_decoder  = nn.Linear(hidden_size, alloc_space_size)
+        self.hidden         = self.init_hidden()
 
     def forward(self, prev_logits, context_vec, step='alloc'):
         if prev_logits.dim() == 1: prev_logits = prev_logits.unsqueeze(0)
-        if context_vec.dim()  == 1: context_vec  = context_vec.unsqueeze(0)
+        if context_vec.dim()  == 1: context_vec = context_vec.unsqueeze(0)
         pad = self.input_dim - prev_logits.shape[-1]
         if pad > 0:
             prev_logits = F.pad(prev_logits, (0, pad))
@@ -387,22 +319,12 @@ class RegrowthAgent(nn.Module):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class OneshotStructuredRegrowthPG:
-    """
-    One-shot structured channel regrowth via RL policy gradient.
-
-    Differences vs iterative structured version:
-    - No outer iteration loop; runs a single RL training session.
-    - Reward = accuracy improvement over a sparsity-matched one-shot baseline.
-    - Everything else (SSIM selection, Taylor scoring, LSTM controller,
-      apply_config_with_weight_transfer, mini-finetune) is identical.
-    """
 
     def __init__(self, config, model_sparse, dense_model,
                  channel_scores, pruned_ch_indices,
                  original_channels, example_inputs,
                  target_layers, train_loader, test_loader,
-                 device, baseline_interp, total_channels,
-                 wandb_run=None):
+                 device, wandb_run=None):
 
         # ── Hyperparameters ───────────────────────────────────────────────────
         self.NUM_EPOCHS         = config['num_epochs']
@@ -417,6 +339,9 @@ class OneshotStructuredRegrowthPG:
         self.CONTEXT_DIM        = config.get('context_dim', 3)
         self.BASELINE_DECAY     = config.get('baseline_decay', 0.9)
 
+        # ── Accuracy threshold ────────────────────────────────────────────────
+        self.acc_threshold = config['acc_threshold']
+
         # ── Models & data ─────────────────────────────────────────────────────
         self.model_sparse      = model_sparse
         self.dense_model       = dense_model
@@ -430,8 +355,8 @@ class OneshotStructuredRegrowthPG:
         self.current_config    = get_current_config(model_sparse)
 
         # ── Capacities ────────────────────────────────────────────────────────
-        self.layer_capacities  = config['layer_capacities']
-        self.total_capacity    = max(sum(self.layer_capacities), 1)
+        self.layer_capacities = config['layer_capacities']
+        self.total_capacity   = max(sum(self.layer_capacities), 1)
 
         # ── Early stopping ────────────────────────────────────────────────────
         self.early_stop_patience  = config.get('early_stop_patience', 40)
@@ -441,15 +366,15 @@ class OneshotStructuredRegrowthPG:
         self.finetune_epochs      = config.get('finetune_epochs', 5)
 
         # ── Tracking ──────────────────────────────────────────────────────────
-        self._best_model        = None
-        self._best_reward_seen  = float('-inf')
+        self._best_model       = None
+        self._best_reward_seen = float('-inf')
 
         # ── Logging / checkpointing ───────────────────────────────────────────
-        self.run             = wandb_run
-        self.model_name      = config.get('model_name')
-        self.method          = config.get('method', 'structured_oneshot')
-        self.checkpoint_dir  = config.get('checkpoint_dir', './structured_oneshot_rl_ckpts')
-        self.model_sparsity  = config.get('model_sparsity', '0.5')
+        self.run            = wandb_run
+        self.model_name     = config.get('model_name')
+        self.method         = config.get('method', 'structured_oneshot')
+        self.checkpoint_dir = config.get('checkpoint_dir', './structured_oneshot_rl_ckpts')
+        self.model_sparsity = config.get('model_sparsity', '0.5')
 
         # ── Entropy schedule ──────────────────────────────────────────────────
         self.use_entropy_schedule = config.get('use_entropy_schedule', True)
@@ -457,18 +382,18 @@ class OneshotStructuredRegrowthPG:
         self.end_beta             = config.get('end_beta', 0.04)
         self.decay_fraction       = config.get('decay_fraction', 0.4)
 
-        # ── Baseline interpolator ─────────────────────────────────────────────
-        self.baseline_interp  = baseline_interp
-        self.total_channels   = total_channels
-
-        # ── Budget options (# channels to restore) ────────────────────────────
-        min_ch = max(1, int(total_channels * config.get('min_budget_frac', 0.001)))
-        max_ch = max(2, int(total_channels * config.get('max_budget_frac', 0.010)))
-        step   = max(1, (max_ch - min_ch) // (self.BUDGET_SPACE - 1))
-        self.budget_options = list(range(min_ch, max_ch + 1, step))[:self.BUDGET_SPACE]
+        # ── Budget options：围绕 target_restore_ch ±20% 均匀生成 ──────────────
+        target_ch = config['target_restore_ch']
+        low  = max(1, int(target_ch * 0.8))
+        high = max(low + 1, int(target_ch * 1.2))
+        step = max(1, (high - low) // (self.BUDGET_SPACE - 1))
+        self.budget_options = list(range(low, high + 1, step))[:self.BUDGET_SPACE]
         while len(self.budget_options) < self.BUDGET_SPACE:
             self.budget_options.append(self.budget_options[-1])
-        print(f"  Budget options (channels): {self.budget_options}")
+
+        print(f"  Sparsity delta : {config.get('sparsity_delta', '?')}")
+        print(f"  Target restore : {target_ch} channels")
+        print(f"  Budget options : {self.budget_options}")
 
         # ── LSTM controller ───────────────────────────────────────────────────
         self.agent = RegrowthAgent(
@@ -483,6 +408,7 @@ class OneshotStructuredRegrowthPG:
         self.reward_baseline = None
         self.layer_priority  = [(n, i) for i, n in enumerate(target_layers)]
 
+        print(f"  Accuracy threshold: {self.acc_threshold:.2f}%")
         print(f"  Layer capacities:")
         for n, i in self.layer_priority:
             print(f"    {n}: cap={self.layer_capacities[i]}")
@@ -559,8 +485,9 @@ class OneshotStructuredRegrowthPG:
                 best_config, best_frac      = new_config, frac
                 self._save_best(epoch, reward, new_config, frac)
 
-            beta       = self.get_entropy_coef(epoch)
-            loss, ent  = self.calculate_loss(ep_budget_logits, ep_alloc_logits, ep_wlp, beta)
+            beta      = self.get_entropy_coef(epoch)
+            loss, ent = self.calculate_loss(
+                ep_budget_logits, ep_alloc_logits, ep_wlp, beta)
             self.adam.zero_grad()
             loss.backward()
             self.adam.step()
@@ -570,16 +497,16 @@ class OneshotStructuredRegrowthPG:
 
             if self.run:
                 self.run.log({
-                    'epoch':          epoch + 1,
-                    'reward_pp':      reward * 100,
-                    'best_pp':        best_reward * 100,
-                    'loss':           loss.item(),
-                    'entropy':        ent.item(),
-                    'beta':           beta,
-                    'budget_ch':      frac,
-                    'sparsity':       sparsity,
-                    'no_improve':     no_imp,
-                    'rwd_std':        rwd_std,
+                    'epoch':      epoch + 1,
+                    'reward_pp':  reward * 100,
+                    'best_pp':    best_reward * 100,
+                    'loss':       loss.item(),
+                    'entropy':    ent.item(),
+                    'beta':       beta,
+                    'budget_ch':  frac,
+                    'sparsity':   sparsity,
+                    'no_improve': no_imp,
+                    'rwd_std':    rwd_std,
                 })
 
             print(f"Ep {epoch + 1:3d}/{self.NUM_EPOCHS} | "
@@ -604,9 +531,9 @@ class OneshotStructuredRegrowthPG:
 
     def play_episode(self, epoch):
         t0 = time.time()
-        self.agent.hidden  = self.agent.init_hidden()
-        prev_logits        = torch.zeros(1, self.BUDGET_SPACE, device=self.DEVICE)
-        all_log_probs      = []
+        self.agent.hidden = self.agent.init_hidden()
+        prev_logits       = torch.zeros(1, self.BUDGET_SPACE, device=self.DEVICE)
+        all_log_probs     = []
         budget_masked_logits = []
         alloc_masked_logits  = []
 
@@ -638,10 +565,10 @@ class OneshotStructuredRegrowthPG:
                 remaining / target_ch    if target_ch > 0 else 0.0,
             ], dtype=torch.float, device=self.DEVICE).unsqueeze(0)
 
-            logits    = self.agent(prev_logits, ctx, step='alloc').squeeze(0)
-            eff_max   = min(cap, remaining)
-            c_opts    = torch.round(ratio_opts * eff_max).to(torch.long)
-            feasible  = c_opts <= remaining
+            logits   = self.agent(prev_logits, ctx, step='alloc').squeeze(0)
+            eff_max  = min(cap, remaining)
+            c_opts   = torch.round(ratio_opts * eff_max).to(torch.long)
+            feasible = c_opts <= remaining
             if not feasible.any(): feasible[0] = True
 
             masked = torch.where(feasible, logits, torch.full_like(logits, -1e9))
@@ -657,13 +584,13 @@ class OneshotStructuredRegrowthPG:
             alloc_masked_logits.append(masked)
             prev_logits = logits.unsqueeze(0)
 
-        ep_log_probs      = torch.stack(all_log_probs)
-        ep_budget_logits  = torch.stack(budget_masked_logits)
-        ep_alloc_logits   = torch.stack(alloc_masked_logits)
+        ep_log_probs     = torch.stack(all_log_probs)
+        ep_budget_logits = torch.stack(budget_masked_logits)
+        ep_alloc_logits  = torch.stack(alloc_masked_logits)
         allocation = {n: int(c) for n, c in zip(pnames, sel_counts) if c > 0}
         print(f"  [Alloc] {sum(sel_counts)}/{target_ch} | {allocation}")
 
-        # ── Taylor channel selection → update config ───────────────────────────
+        # ── Taylor channel selection → update config ──────────────────────────
         new_config = copy.copy(self.current_config)
         for lname, n_restore in allocation.items():
             chs = select_channels_by_taylor(
@@ -687,14 +614,12 @@ class OneshotStructuredRegrowthPG:
         accuracy = self.evaluate_model(new_model, full_eval=True)
         sparsity = compute_channel_sparsity(new_model, self.original_channels)
 
-        # ── Reward = acc - one-shot baseline ──────────────────────────────────
-        baseline_acc = self.baseline_interp.get_baseline_acc(sparsity)
-        improvement  = accuracy - baseline_acc
-        reward       = improvement / 100.0
+        # ── Reward = acc - fixed threshold ────────────────────────────────────
+        reward = (accuracy - self.acc_threshold) / 100.0
 
         print(f"  [Reward] acc={accuracy:.2f}%  "
-              f"baseline@sp={sparsity:.4f}→{baseline_acc:.2f}%  "
-              f"Δ={improvement:+.2f}pp  reward={reward:+.4f}")
+              f"threshold={self.acc_threshold:.2f}%  "
+              f"Δ={accuracy - self.acc_threshold:+.2f}pp  reward={reward:+.4f}")
 
         if reward > self._best_reward_seen:
             self._best_reward_seen = reward
@@ -713,8 +638,8 @@ class OneshotStructuredRegrowthPG:
         ep_wlp = torch.sum(ep_log_probs * adv_t).unsqueeze(0)
 
         print(f"  [{time.time() - t0:.1f}s]")
-        return ep_wlp, ep_budget_logits, ep_alloc_logits, \
-               reward, new_config, sparsity, target_ch
+        return (ep_wlp, ep_budget_logits, ep_alloc_logits,
+                reward, new_config, sparsity, target_ch)
 
     def _save_best(self, epoch, reward, config, budget_ch):
         d = os.path.join(self.checkpoint_dir,
@@ -758,35 +683,41 @@ def quick_eval(model, test_loader, device):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name',    type=str,   default='effnet')
-    parser.add_argument('--data_dir',  type=str,   default='./data')
-    parser.add_argument('--method',    type=str,   default='structured_oneshot')
-    parser.add_argument('--pruned_ckpt', type=str, default=None,
-                        help='Path to the structured-pruned model (.pth)')
+    parser.add_argument('--m_name',      type=str,   default='vgg16')
+    parser.add_argument('--data_dir',    type=str,   default='./data')
+    parser.add_argument('--method',      type=str,   default='structured_oneshot')
+    parser.add_argument('--pruned_ckpt', type=str,   default="./vgg16/ckpt_after_prune_structured_oneshot/"
+                                                             "pruned_structured_l1_sp0.95_it1.pth")
+
+    # Threshold
+    parser.add_argument('--acc_threshold', type=float, default=67.73,
+                        help='Reward = acc - threshold (pp)')
+
+    # Sparsity delta：控制每次 episode 恢复多少 channel
+    parser.add_argument('--sparsity_delta', type=float, default=0.01,
+                        help='Target sparsity drop, e.g. 0.025 = restore 2.5%% of original channels')
 
     # RL
-    parser.add_argument('--num_epochs',       type=int,   default=300)
-    parser.add_argument('--learning_rate',    type=float, default=3e-4)
-    parser.add_argument('--hidden_size',      type=int,   default=64)
-    parser.add_argument('--entropy_coef',     type=float, default=0.5)
+    parser.add_argument('--num_epochs',         type=int,   default=300)
+    parser.add_argument('--learning_rate',      type=float, default=3e-4)
+    parser.add_argument('--hidden_size',        type=int,   default=64)
+    parser.add_argument('--entropy_coef',       type=float, default=0.5)
     parser.add_argument('--reward_temperature', type=float, default=0.005)
-    parser.add_argument('--start_beta',       type=float, default=0.40)
-    parser.add_argument('--end_beta',         type=float, default=0.04)
-    parser.add_argument('--decay_fraction',   type=float, default=0.4)
-    parser.add_argument('--budget_space_size',type=int,   default=5)
-    parser.add_argument('--alloc_space_size', type=int,   default=11)
-    parser.add_argument('--min_budget_frac',  type=float, default=0.001)
-    parser.add_argument('--max_budget_frac',  type=float, default=0.010)
+    parser.add_argument('--start_beta',         type=float, default=0.40)
+    parser.add_argument('--end_beta',           type=float, default=0.04)
+    parser.add_argument('--decay_fraction',     type=float, default=0.4)
+    parser.add_argument('--budget_space_size',  type=int,   default=5)
+    parser.add_argument('--alloc_space_size',   type=int,   default=11)
 
     # SSIM
     parser.add_argument('--ssim_threshold',   type=float, default=0.0)
     parser.add_argument('--ssim_num_batches', type=int,   default=64)
 
     # Taylor
-    parser.add_argument('--taylor_batches',   type=int,   default=10)
+    parser.add_argument('--taylor_batches', type=int, default=10)
 
     # Finetune
-    parser.add_argument('--finetune_epochs',  type=int,   default=40)
+    parser.add_argument('--finetune_epochs', type=int, default=40)
 
     # Early stopping
     parser.add_argument('--early_stop_patience',  type=int,   default=40)
@@ -795,7 +726,7 @@ def main():
     parser.add_argument('--reward_window_size',   type=int,   default=20)
 
     # Misc
-    parser.add_argument('--save_dir', type=str, default='./structured_oneshot_rl_ckpts')
+    parser.add_argument('--save_dir', type=str, default='./structured_rl_ckpts')
     parser.add_argument('--seed',     type=int, default=42)
     args = parser.parse_args()
     set_seed(args.seed)
@@ -807,11 +738,6 @@ def main():
     example_inputs, _ = next(iter(train_loader))
     example_inputs = example_inputs[:1].to(device)
 
-    # ── Baseline ─────────────────────────────────────────────────────────────
-    assert args.m_name in ONESHOT_BASELINE_TABLES, \
-        f"No baseline table for '{args.m_name}'"
-    baseline_interp = BaselineInterpolator(ONESHOT_BASELINE_TABLES[args.m_name])
-
     # ── Dense (pretrained) model ──────────────────────────────────────────────
     dense_model = model_loader(args.m_name, device)
     ckpt = torch.load(f'./{args.m_name}/checkpoint/pretrain_{args.m_name}_ckpt.pth',
@@ -820,7 +746,7 @@ def main():
     dense_model.eval()
     original_channels = get_original_channels(dense_model)
 
-    # ── Pruned model (structured one-shot pruned + finetuned) ─────────────────
+    # ── Pruned model ──────────────────────────────────────────────────────────
     assert args.pruned_ckpt, "Provide --pruned_ckpt path to a structured-pruned model."
     pruned_model = torch.load(args.pruned_ckpt, map_location=device, weights_only=False)
     pruned_model.eval()
@@ -828,7 +754,7 @@ def main():
     sp0  = compute_channel_sparsity(pruned_model, original_channels)
     acc0 = quick_eval(pruned_model, test_loader, device)
     print(f"\nStarting point → Acc: {acc0:.2f}%  ChannelSparsity: {sp0:.4f}")
-    print(f"Baseline@sp={sp0:.4f}: {baseline_interp.get_baseline_acc(sp0):.2f}%\n")
+    print(f"Threshold: {args.acc_threshold:.2f}%  Δ={acc0 - args.acc_threshold:+.2f}pp\n")
 
     # ── Target layers ─────────────────────────────────────────────────────────
     target_layers = get_target_layers(dense_model, pruned_model)
@@ -838,8 +764,19 @@ def main():
         p_ch = dict(pruned_model.named_modules())[name].out_channels
         print(f"  {name}: {d_ch} → {p_ch}  (pruned {d_ch - p_ch})")
 
-    total_channels = sum(original_channels[n] for n in target_layers
-                         if n in original_channels)
+    # ── target_restore_ch：由 sparsity_delta 决定 ─────────────────────────────
+    total_original_ch = sum(original_channels.values())
+    layer_capacities  = get_layer_capacities(dense_model, pruned_model, target_layers)
+    target_restore_ch = int(total_original_ch * args.sparsity_delta)
+    target_restore_ch = min(target_restore_ch, sum(layer_capacities))
+
+    print(f"\nSparsity delta   : {args.sparsity_delta:.4f}")
+    print(f"Total original ch: {total_original_ch}")
+    print(f"Target restore ch: {target_restore_ch}  (cap={sum(layer_capacities)})\n")
+
+    if sum(layer_capacities) == 0:
+        print("No channels to restore. Exiting.")
+        return
 
     # ── SSIM layer selection ──────────────────────────────────────────────────
     selected_layers, ssim_scores = SSIMLayerSelector.update_search_space(
@@ -864,16 +801,12 @@ def main():
     pruned_ch_indices = get_pruned_channel_indices(dense_model, pruned_model, selected_layers)
     layer_capacities  = get_layer_capacities(dense_model, pruned_model, selected_layers)
 
-    if sum(layer_capacities) == 0:
-        print("No channels to restore. Exiting.")
-        return
-
     # ── WandB ─────────────────────────────────────────────────────────────────
     run = wandb.init(
         project="structured_oneshot_rl_regrowth",
-        name=f"{args.m_name}_oneshot_sp{sp0:.3f}",
-        config=vars(args) | {"total_channels": total_channels,
-                              "start_acc": acc0, "start_sp": sp0},
+        name=f"{args.m_name}_oneshot_sp{sp0:.3f}_delta{args.sparsity_delta}",
+        config=vars(args) | {"start_acc": acc0, "start_sp": sp0,
+                             "target_restore_ch": target_restore_ch},
     )
 
     # ── RL config ─────────────────────────────────────────────────────────────
@@ -897,9 +830,10 @@ def main():
         'reward_window_size':   args.reward_window_size,
         'model_sparsity':       f"sp{sp0:.3f}",
         'method':               args.method,
-        'min_budget_frac':      args.min_budget_frac,
-        'max_budget_frac':      args.max_budget_frac,
         'finetune_epochs':      args.finetune_epochs,
+        'acc_threshold':        args.acc_threshold,
+        'target_restore_ch':    target_restore_ch,
+        'sparsity_delta':       args.sparsity_delta,
     }
 
     pg = OneshotStructuredRegrowthPG(
@@ -914,8 +848,6 @@ def main():
         train_loader=train_loader,
         test_loader=test_loader,
         device=device,
-        baseline_interp=baseline_interp,
-        total_channels=total_channels,
         wandb_run=run,
     )
 
@@ -925,16 +857,16 @@ def main():
     best_model = pg._best_model or pruned_model
     final_acc  = quick_eval(best_model, test_loader, device)
     final_sp   = compute_channel_sparsity(best_model, original_channels)
-    final_base = baseline_interp.get_baseline_acc(final_sp)
 
     print(f"\n{'=' * 70}")
     print(f"DONE | Acc={final_acc:.2f}%  Sp={final_sp:.4f}  "
-          f"Baseline={final_base:.2f}%  Δ={final_acc - final_base:+.2f}pp")
+          f"Threshold={args.acc_threshold:.2f}%  "
+          f"Δ={final_acc - args.acc_threshold:+.2f}pp")
     print(f"{'=' * 70}")
 
-    run.log({"final/accuracy":              final_acc,
-             "final/sparsity":              final_sp,
-             "final/delta_baseline_pp":     final_acc - final_base})
+    run.log({"final/accuracy":           final_acc,
+             "final/sparsity":           final_sp,
+             "final/delta_threshold_pp": final_acc - args.acc_threshold})
     run.finish()
 
 

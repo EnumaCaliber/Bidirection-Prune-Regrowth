@@ -38,7 +38,7 @@ parser.add_argument('--num_workers',type=int, default=15)
 args = parser.parse_args()
 
 run = wandb.init(
-    project="model-prune-oneshot-0.99",
+    project=f"model-prune-oneshot-{args.oneshot}",
     config=args,
     name=f"{args.m_name}_prune_{args.pruner}_oneshot_{args.oneshot}",
 )
