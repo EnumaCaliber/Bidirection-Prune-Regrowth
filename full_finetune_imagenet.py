@@ -17,9 +17,9 @@ import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name', type=str, default='vgg16TinyImageNet')
-parser.add_argument('--sparsity', default=0.97)
+parser.add_argument('--sparsity', default=0.96)
 parser.add_argument('--model_path', type=str,
-                    default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97/regrown_model.pth')
+                    default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.96/regrown_model.pth')
 parser.add_argument('--data_dir', type=str, default='./data')
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--num_workers', type=int, default=15)
@@ -108,7 +108,7 @@ def full_finetune(model, train_loader, test_loader, device,
         if (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch + 1}/{epochs} | Test Acc: {test_accuracy:.2f}% | Best: {best_accuracy:.2f}%")
         if (epoch + 1) % 50 == 0:
-            torch.save(model.state_dict(), f'./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97fullfinetune/epoch{epoch}.pth')
+            torch.save(model.state_dict(), f'./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.96fullfinetune/epoch{epoch}.pth')
 
 
         if epochs_without_improvement >= patience:
@@ -151,7 +151,7 @@ final_acc = full_finetune(
     device=device,
     epochs=400,
     lr=0.0003,
-    save_path=f"./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97fullfinetune/final_model_{args.sparsity}.pth",
+    save_path=f"./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.96fullfinetune/final_model_{args.sparsity}.pth",
     patience=50,
 )
 print(f"\n{'=' * 60}")

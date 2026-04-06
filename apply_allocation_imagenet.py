@@ -118,7 +118,7 @@ if __name__ == '__main__':
     parser.add_argument('--m_name', type=str, default='vgg16TinyImageNet')
     parser.add_argument('--data_dir', type=str, default='./data')
     parser.add_argument('--allocation_path', type=str,
-                        default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97/best_saliency_allocation.pth')
+                        default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.96/best_saliency_allocation.pth')
     parser.add_argument('--pruned_model_path', type=str,
                         default='./vgg16TinyImageNet/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.98.pth')
     parser.add_argument('--pretrained_model_path', type=str,
@@ -127,7 +127,7 @@ if __name__ == '__main__':
                         choices=['zero', 'kaiming', 'xavier', 'magnitude'])
     parser.add_argument('--saliency_max_batches', type=int, default=50)
     parser.add_argument('--save_path', type=str,
-                        default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97/regrown_model.pth')
+                        default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.96/regrown_model.pth')
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=15)
     parser.add_argument('--val_split', type=float, default=0.1)

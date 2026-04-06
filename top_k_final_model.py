@@ -9,8 +9,8 @@ import random
 import numpy as np
 
 parser = argparse.ArgumentParser(description='Evaluate Top-1 & Top-5 Accuracy')
-parser.add_argument('--m_name',      type=str, default="vgg16TinyImageNet")
-parser.add_argument('--ckpt_path',   type=str, default="./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97fullfinetune/final_model_0.97.pth")
+parser.add_argument('--m_name',      type=str, default="shufflenetv2TinyImageNet")
+parser.add_argument('--ckpt_path',   type=str, default="./shufflenetv2TinyImageNet/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.3.pth")
 parser.add_argument('--data_dir',    type=str, default='./data')
 parser.add_argument('--batch_size',  type=int, default=128)
 parser.add_argument('--num_workers', type=int, default=15)
