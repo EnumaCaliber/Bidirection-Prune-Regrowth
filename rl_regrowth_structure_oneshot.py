@@ -384,10 +384,11 @@ class OneshotStructuredRegrowthPG:
 
         # ── Budget options：围绕 target_restore_ch ±20% 均匀生成 ──────────────
         target_ch = config['target_restore_ch']
-        low  = max(1, int(target_ch * 0.8))
-        high = max(low + 1, int(target_ch * 1.2))
-        step = max(1, (high - low) // (self.BUDGET_SPACE - 1))
-        self.budget_options = list(range(low, high + 1, step))[:self.BUDGET_SPACE]
+        # low = max(1, int(target_ch * 0.8))
+        # high = target_ch
+        # step = max(1, (high - low) // (self.BUDGET_SPACE - 1))
+        # self.budget_options = list(range(low, high + 1, step))[:self.BUDGET_SPACE]
+        self.budget_options = [config['target_restore_ch']] * self.BUDGET_SPACE
         while len(self.budget_options) < self.BUDGET_SPACE:
             self.budget_options.append(self.budget_options[-1])
 
@@ -690,11 +691,11 @@ def main():
                                                              "pruned_structured_l1_sp0.95_it1.pth")
 
     # Threshold
-    parser.add_argument('--acc_threshold', type=float, default=67.73,
+    parser.add_argument('--acc_threshold', type=float, default=72.98,
                         help='Reward = acc - threshold (pp)')
 
     # Sparsity delta：控制每次 episode 恢复多少 channel
-    parser.add_argument('--sparsity_delta', type=float, default=0.01,
+    parser.add_argument('--sparsity_delta', type=float, default=0.02,
                         help='Target sparsity drop, e.g. 0.025 = restore 2.5%% of original channels')
 
     # RL

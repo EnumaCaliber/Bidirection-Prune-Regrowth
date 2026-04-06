@@ -15,11 +15,11 @@ import random
 import numpy as np
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--m_name', type=str, default='vgg16TinyImageNet')
-parser.add_argument('--sparsity', default=0.97)
+parser.add_argument('--m_name', type=str, default='vgg16')
+parser.add_argument('--sparsity', default=0.94)
 parser.add_argument('--model_path', type=str,
                     #0.8399
-                    default='./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97/regrown_model.pth')  # 改为 model_path
+                    default='./structured_rl_ckpts/vgg16/structured_oneshot/sp0.952/best_model_rwd+7.87pp.pth')  # 改为 model_path
 args = parser.parse_args()
 
 def set_seed(seed=42):
@@ -102,7 +102,7 @@ def full_finetune(model, train_loader, test_loader, device,
         if (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch + 1}/{epochs} | Test Acc: {test_accuracy:.2f}% | Best: {best_accuracy:.2f}%")
         if (epoch + 1) % 50 == 0:
-            torch.save(model.state_dict(), f'./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97fullfinetune/epoch{epoch}.pth')
+            torch.save(model.state_dict(), f'./structured_rl_ckpts/vgg16/structured_oneshot/fullfinetune_sp0.952/epoch{epoch}.pth')
 
 
         if epochs_without_improvement >= patience:
@@ -140,7 +140,7 @@ final_acc = full_finetune(
     device=device,
     epochs=400,
     lr=0.0003,
-    save_path=f"./rl_saliency_checkpoints/vgg16TinyImageNet/oneshot/0.97fullfinetune/final_model_{args.sparsity}.pth",
+    save_path=f"./structured_rl_ckpts/vgg16/structured_oneshot/fullfinetune_sp0.952/final_model_{args.sparsity}.pth",
     patience=50,
 )
 print(f"\n{'=' * 60}")
