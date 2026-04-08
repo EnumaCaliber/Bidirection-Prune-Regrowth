@@ -4,6 +4,8 @@ Structured RL-based One-Shot Regrowth
 One-shot version of the structured regrowth pipeline.
 Reward = accuracy - fixed threshold (no baseline interpolation).
 Budget controlled by --sparsity_delta (e.g. 0.025 = drop sparsity 2.5pp).
+
+Fix: added sparsity verification after model rebuild + new_config completeness check.
 """
 
 import torch
@@ -172,6 +174,43 @@ def apply_config_with_weight_transfer(current_model, dense_model,
             new_m.running_var[:n]  = cur_m.running_var[:n].data
 
     return new_model
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [FIX] Verify actual channel counts after rebuild
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def verify_rebuild(new_model, new_config, original_channels, pruned_sp, label="new_model"):
+    """
+    Compare intended new_config vs actual channel counts in rebuilt model.
+    Prints warnings if torch_pruning didn't honor our requested config
+    (can happen with EfficientNet due to structural coupling constraints).
+    Returns actual sparsity.
+    """
+    actual_config = get_current_config(new_model)
+    actual_sp     = compute_channel_sparsity(new_model, original_channels)
+    mismatch      = 0
+
+    print(f"\n  ── Rebuild Verification [{label}] ──")
+    print(f"  pruned_sp={pruned_sp:.4f}  actual_sp={actual_sp:.4f}  "
+          f"Δ={pruned_sp - actual_sp:.4f}")
+
+    for name in new_config:
+        intended = new_config[name]
+        actual   = actual_config.get(name, -1)
+        orig     = original_channels.get(name, -1)
+        if intended != actual:
+            mismatch += 1
+            print(f"  !! MISMATCH {name}: intended={intended}  actual={actual}  "
+                  f"orig={orig}")
+
+    if mismatch == 0:
+        print(f"  ✓ All {len(new_config)} layers match intended config")
+    else:
+        print(f"  !! {mismatch} layers did NOT match — "
+              f"torch_pruning enforced structural constraints")
+    print()
+    return actual_sp
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -354,6 +393,9 @@ class OneshotStructuredRegrowthPG:
         self.example_inputs    = example_inputs
         self.current_config    = get_current_config(model_sparse)
 
+        # ── [FIX] Record pruned model sparsity for verification ───────────────
+        self.pruned_sp = compute_channel_sparsity(model_sparse, original_channels)
+
         # ── Capacities ────────────────────────────────────────────────────────
         self.layer_capacities = config['layer_capacities']
         self.total_capacity   = max(sum(self.layer_capacities), 1)
@@ -382,12 +424,8 @@ class OneshotStructuredRegrowthPG:
         self.end_beta             = config.get('end_beta', 0.04)
         self.decay_fraction       = config.get('decay_fraction', 0.4)
 
-        # ── Budget options：围绕 target_restore_ch ±20% 均匀生成 ──────────────
+        # ── Budget options ────────────────────────────────────────────────────
         target_ch = config['target_restore_ch']
-        # low = max(1, int(target_ch * 0.8))
-        # high = target_ch
-        # step = max(1, (high - low) // (self.BUDGET_SPACE - 1))
-        # self.budget_options = list(range(low, high + 1, step))[:self.BUDGET_SPACE]
         self.budget_options = [config['target_restore_ch']] * self.BUDGET_SPACE
         while len(self.budget_options) < self.BUDGET_SPACE:
             self.budget_options.append(self.budget_options[-1])
@@ -600,6 +638,13 @@ class OneshotStructuredRegrowthPG:
                 new_config[lname] = self.current_config[lname] + len(chs)
                 print(f"    {lname}: +{len(chs)} ch (taylor top3: {chs[:3]})")
 
+        # ── [FIX] Print intended config delta before rebuild ──────────────────
+        intended_delta = sum(
+            new_config.get(n, 0) - self.current_config.get(n, 0)
+            for n in new_config
+        )
+        print(f"  [Config] intended total channel gain: +{intended_delta}")
+
         # ── Rebuild model with weight transfer ────────────────────────────────
         new_model = apply_config_with_weight_transfer(
             current_model=self.model_sparse,
@@ -608,6 +653,32 @@ class OneshotStructuredRegrowthPG:
             original_channels=self.original_channels,
             example_inputs=self.example_inputs,
         ).to(self.DEVICE)
+
+        # ── [FIX] Verify actual sparsity after rebuild ────────────────────────
+        # Only do full verification on epoch 0 to avoid verbose logs
+        if epoch == 0:
+            actual_sp = verify_rebuild(
+                new_model, new_config, self.original_channels,
+                self.pruned_sp, label=f"ep{epoch}"
+            )
+        else:
+            actual_sp = compute_channel_sparsity(new_model, self.original_channels)
+
+        # ── [FIX] Warn if sparsity didn't change as expected ─────────────────
+        expected_sp = self.pruned_sp - (
+            intended_delta / max(sum(self.original_channels.values()), 1)
+        )
+        if abs(actual_sp - self.pruned_sp) < 0.001:
+            print(f"  !! WARNING: sparsity unchanged after rebuild! "
+                  f"pruned={self.pruned_sp:.4f}  actual={actual_sp:.4f}  "
+                  f"expected≈{expected_sp:.4f}")
+            print(f"  !! This likely means torch_pruning enforced structural "
+                  f"constraints (e.g. EfficientNet depthwise coupling).")
+            print(f"  !! Consider using --ssim_threshold=-1 to select ALL layers "
+                  f"together, or reduce --sparsity_delta.")
+        else:
+            print(f"  [Sparsity] pruned={self.pruned_sp:.4f} → "
+                  f"actual={actual_sp:.4f}  Δ={self.pruned_sp - actual_sp:.4f}")
 
         # ── Mini finetune ─────────────────────────────────────────────────────
         self.mini_finetune(new_model, epochs=self.finetune_epochs)
@@ -694,7 +765,7 @@ def main():
     parser.add_argument('--acc_threshold', type=float, default=71.31,
                         help='Reward = acc - threshold (pp)')
 
-    # Sparsity delta：控制每次 episode 恢复多少 channel
+    # Sparsity delta
     parser.add_argument('--sparsity_delta', type=float, default=0.04,
                         help='Target sparsity drop, e.g. 0.025 = restore 2.5%% of original channels')
 
@@ -801,6 +872,28 @@ def main():
 
     pruned_ch_indices = get_pruned_channel_indices(dense_model, pruned_model, selected_layers)
     layer_capacities  = get_layer_capacities(dense_model, pruned_model, selected_layers)
+
+    # ── [FIX] Sanity check: does apply_config actually change sparsity? ───────
+    print("\n── Sanity check: apply_config on selected_layers ──")
+    test_config = get_current_config(pruned_model)
+    for lname in selected_layers:
+        cap = dict(zip(target_layers, get_layer_capacities(dense_model, pruned_model, target_layers)))
+        restore_n = min(10, cap.get(lname, 0))
+        if restore_n > 0:
+            test_config[lname] = test_config[lname] + restore_n
+
+    test_model = apply_config(dense_model, test_config, original_channels, example_inputs)
+    test_sp    = compute_channel_sparsity(test_model, original_channels)
+    print(f"  pruned_sp={sp0:.4f}  after_test_restore_sp={test_sp:.4f}  "
+          f"Δ={sp0 - test_sp:.4f}")
+    if abs(test_sp - sp0) < 0.001:
+        print("  !! WARNING: apply_config didn't change sparsity in sanity check!")
+        print("  !! Check if torch_pruning respects per-layer pruning_ratio_dict")
+        print("  !! for this model architecture (EfficientNet depthwise constraints).")
+    else:
+        print("  ✓ apply_config correctly changes sparsity")
+    del test_model
+    print()
 
     # ── WandB ─────────────────────────────────────────────────────────────────
     run = wandb.init(

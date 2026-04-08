@@ -9,10 +9,10 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_path', type=str,
-                    default='./structured_rl_ckpts/vgg16/structured_oneshot/sp0.952/best_model_rwd+7.87pp.pth')
+                    default='./structured_rl_ckpts/effnet/structured_oneshot/sp90-86/best_model_rwd-3.12pp.pth')
 parser.add_argument('--save_dir', type=str,
-                    default='./structured_rl_ckpts/vgg16/structured_oneshot/fullfinetune_sp0.952')
-parser.add_argument('--sparsity', type=str, default='0.952')
+                    default='./structured_rl_ckpts/effnet/structured_oneshot/fullfinetune_sp90-86')
+parser.add_argument('--sparsity', type=str, default='0.89')
 parser.add_argument('--epochs',   type=int, default=400)
 parser.add_argument('--lr',       type=float, default=3e-4)
 parser.add_argument('--patience', type=int, default=50)

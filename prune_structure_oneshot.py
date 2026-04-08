@@ -24,12 +24,12 @@ from iclr2021_solution.tools import *
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Structured Prune')
 
-parser.add_argument('--m_name', type=str, default="effnet")
+parser.add_argument('--m_name', type=str, default="resnet20")
 parser.add_argument('--seed', type=int, default=42)
 parser.add_argument('--m_prune', type=str, default='oneshot')
 parser.add_argument('--iter_start', type=int, default=1)
 parser.add_argument('--iter_end', type=int, default=1)
-parser.add_argument('--oneshot', type=float, default=0.9, help='channel sparsity')
+parser.add_argument('--oneshot', type=float, default=0.84, help='channel sparsity')
 parser.add_argument('--pruner', type=str, default='l1',
                     choices=['l1', 'lamp', 'taylor'],
                     help='structured pruning importance metric')

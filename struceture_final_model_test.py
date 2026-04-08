@@ -5,9 +5,9 @@ from utils.model_loader import model_loader
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--m_name',     type=str, default='vgg16')
+parser.add_argument('--m_name',     type=str, default='effnet')
 parser.add_argument('--model_path', type=str,
-                    default='./structured_rl_ckpts/vgg16/structured_oneshot/fullfinetune_sp0.952/final_model_0.952.pth')
+                    default='./structured_rl_ckpts/effnet/structured_oneshot/fullfinetune_sp0.952-0.93/best_model_rwd+3.86pp_full.pth')
 parser.add_argument('--orig_ckpt',  type=str,
                     default='./vgg16/checkpoint/pretrain_vgg16_ckpt.pth',
                     help='原始 dense 模型，用于算 channel sparsity')
@@ -31,7 +31,7 @@ original_channels = {name: m.out_channels
 # ── 加载 finetune 后的模型 ────────────────────────────────────────────────────
 # fullfinetune 存的是 state_dict，需要先还原结构
 # 结构从 RL ckpt 里拿（整模型），再 load state_dict
-rl_model_path = './structured_rl_ckpts/vgg16/structured_oneshot/sp0.952-094/best_model_rwd+7.87pp.pth'
+rl_model_path = 'structured_rl_ckpts/vgg16/structured_oneshot/sp0.952-0.93/best_model_rwd+3.86pp.pth'
 model = torch.load(rl_model_path, map_location=device, weights_only=False)
 model.load_state_dict(torch.load(args.model_path, map_location=device, weights_only=False))
 model = model.to(device)

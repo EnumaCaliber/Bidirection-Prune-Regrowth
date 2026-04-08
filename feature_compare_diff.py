@@ -19,7 +19,11 @@ TAGS       = ["pretrained", "pruned-high", "pruned-low"]
 COL_LABELS = ["Baseline", "High Sparsity", "Low Sparsity"]
 COL_COLORS = ["steelblue", "tomato", "orange"]
 
-HIGHLIGHT_COLOR = np.array([1.0, 0.2, 0.2])
+HIGHLIGHT_COLOR = np.array([0xf7/255, 0xeb/255, 0xc6/255], dtype=np.float32)  # #F7EBC6 米黄 异号
+SAME_SIGN_COLOR = np.array([0x9b/255, 0xb8/255, 0x9c/255], dtype=np.float32)  # #9BB89C 鼠尾草绿 同号
+POSITIVE_COLOR  = np.array([0.0, 0.0, 0.0], dtype=np.float32)                 # 黑色 正值
+NEGATIVE_COLOR  = np.array([1.0, 1.0, 1.0], dtype=np.float32)                 # 白色 负值
+ZERO_COLOR      = np.array([0.5, 0.5, 0.5], dtype=np.float32)                 # 灰色 零值
 
 IMG_IDX  = 0
 DEVICE   = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -103,25 +107,36 @@ def make_highlight_mask(base: torch.Tensor, pruned: torch.Tensor) -> torch.Tenso
     return (base * pruned) < 0
 
 
-def to_gray_rgb(tensor: torch.Tensor) -> np.ndarray:
+def to_sign_rgb(tensor: torch.Tensor) -> np.ndarray:
+    """正值 → 黑色，负值 → 白色，零 → 灰色。"""
     arr = tensor.cpu().float().numpy()
-    arr = (arr - arr.min()) / (arr.max() - arr.min() + 1e-8)
-    return np.stack([arr, arr, arr], axis=-1)
-
-
-def apply_highlight(gray_rgb: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    out = gray_rgb.copy()
-    out[mask] = HIGHLIGHT_COLOR
+    out = np.full((*arr.shape, 3), 0.5, dtype=np.float32)  # 默认灰（零）
+    out[arr > 0] = POSITIVE_COLOR                           # 正 → 黑
+    out[arr < 0] = NEGATIVE_COLOR                           # 负 → 白
     return out
+
+
+def apply_highlight(base: torch.Tensor, pruned: torch.Tensor) -> np.ndarray:
+    """同号 → #9BB89C，异号 → #F7EBC6。"""
+    mask = make_highlight_mask(base, pruned).cpu().numpy()
+    out  = np.where(mask[..., None], HIGHLIGHT_COLOR, SAME_SIGN_COLOR)
+    return out.astype(np.float32)
 
 
 def add_legend(ax, tag):
     if tag == "pretrained":
-        return
-    handles = [
-        mpatches.Patch(facecolor='gray',          label='same sign as baseline'),
-        mpatches.Patch(facecolor=HIGHLIGHT_COLOR, label='opposite sign'),
-    ]
+        handles = [
+            mpatches.Patch(facecolor=POSITIVE_COLOR, label='positive',
+                           edgecolor='lightgray'),
+            mpatches.Patch(facecolor=NEGATIVE_COLOR, label='negative',
+                           edgecolor='lightgray'),
+            mpatches.Patch(facecolor=ZERO_COLOR,     label='zero'),
+        ]
+    else:
+        handles = [
+            mpatches.Patch(facecolor=SAME_SIGN_COLOR, label='same sign as baseline'),
+            mpatches.Patch(facecolor=HIGHLIGHT_COLOR, label='opposite sign'),
+        ]
     ax.legend(handles=handles, loc='lower right', fontsize=6,
               framealpha=0.75, handlelength=1.2)
 
@@ -147,13 +162,11 @@ def save_conv_per_tag(feat_dict, layer_name, dirs, max_ch=64):
         for r in range(n):
             row_imgs = []
             for c in range(n):
-                ch   = r * n + c
-                gray = to_gray_rgb(base[ch])
+                ch = r * n + c
                 if tag == "pretrained":
-                    row_imgs.append(gray)
+                    row_imgs.append(to_sign_rgb(base[ch]))
                 else:
-                    mask = make_highlight_mask(base[ch], pruned[ch])
-                    row_imgs.append(apply_highlight(gray, mask.cpu().numpy()))
+                    row_imgs.append(apply_highlight(base[ch], pruned[ch]))
             rows.append(np.concatenate(row_imgs, axis=1))
 
         grid = np.concatenate(rows, axis=0)
@@ -201,16 +214,21 @@ def save_linear_per_tag(feat_dict, layer_name, dirs):
         norm   = ((pruned - g_min) / (g_max - g_min + 1e-8)).cpu().numpy()
 
         if tag == "pretrained":
-            bar_colors  = ['gray'] * len(norm)
+            def sign_color(v):
+                if v > 0: return tuple(POSITIVE_COLOR)
+                if v < 0: return tuple(NEGATIVE_COLOR)
+                return tuple(ZERO_COLOR)
+            bar_colors  = [sign_color(v) for v in pruned.cpu().numpy()]
             changed_pct = None
         else:
             mask        = make_highlight_mask(base, pruned).cpu().numpy()
-            bar_colors  = [tuple(HIGHLIGHT_COLOR) if m else (0.5, 0.5, 0.5)
+            bar_colors  = [tuple(HIGHLIGHT_COLOR) if m else tuple(SAME_SIGN_COLOR)
                            for m in mask]
             changed_pct = mask.mean() * 100
 
         fig, ax = plt.subplots(figsize=(8, 2.5))
-        ax.bar(range(len(norm)), norm, color=bar_colors, width=1.0)
+        ax.bar(range(len(norm)), norm, color=bar_colors, width=1.0,
+               edgecolor='none')
         ax.set_ylim([0, 1.05])
         ax.axhline(y=0, color='k', linewidth=0.4)
         ax.tick_params(labelbottom=False)
