@@ -684,14 +684,14 @@ def quick_eval(model, test_loader, device):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name',      type=str,   default='effnet')
+    parser.add_argument('--m_name',      type=str,   default='resnet20')
     parser.add_argument('--data_dir',    type=str,   default='./data')
     parser.add_argument('--method',      type=str,   default='structured_oneshot')
-    parser.add_argument('--pruned_ckpt', type=str,   default="./effnet/ckpt_after_prune_structured_oneshot/"
-                                                             "pruned_structured_l1_sp0.9_it1.pth")
+    parser.add_argument('--pruned_ckpt', type=str,   default="./resnet20/ckpt_after_prune_structured_oneshot/"
+                                                             "pruned_structured_l1_sp0.85_it1.pth")
 
     # Threshold
-    parser.add_argument('--acc_threshold', type=float, default=71.31,
+    parser.add_argument('--acc_threshold', type=float, default=50,
                         help='Reward = acc - threshold (pp)')
 
     # Sparsity delta：控制每次 episode 恢复多少 channel

@@ -152,10 +152,10 @@ def main():
     parser.add_argument('--ckpt',    type=str,
                         default=None,
                         help='单个 checkpoint 路径')
-    parser.add_argument('--dir',     type=str, default="./resnet20/ckpt_structured_iterative/"
+    parser.add_argument('--dir',     type=str, default="./structured_rl_ckpts/effnet/structured_oneshot/sp0.890"
 ,
                         help='目录，自动搜索所有 .pth 文件')
-    parser.add_argument('--m_name',  type=str, default='resnet20',
+    parser.add_argument('--m_name',  type=str, default='effnet',
                         help='模型名，用于加载 dense 计算稀疏度')
     parser.add_argument('--data_dir',type=str, default='./data')
     parser.add_argument('--verbose', action='store_true',
@@ -213,7 +213,7 @@ def main():
         if r:
             results.append(r)
             print(f"  Acc={r['acc']:.2f}%  "
-                  f"ChannelSparsity={r['ch_sparsity']:.4f} ({r['ch_sparsity']*100:.4f}%)  "
+                  f"ChannelSparsity={r['ch_sparsity']:.4f} ({r['ch_sparsity']*100:.6f}%)  "
                   f"Params={r['params_M']:.2f}M")
 
     if not results:
