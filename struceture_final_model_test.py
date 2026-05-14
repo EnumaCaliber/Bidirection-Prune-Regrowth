@@ -7,15 +7,18 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name',     type=str, default='effnet')
 parser.add_argument('--model_path', type=str,
-                    default='./structured_rl_ckpts/effnet/structured_oneshot/fullfinetune_sp0.952-0.93/best_model_rwd+3.86pp_full.pth')
+                    default='./structured_rl_ckpts/effnet/structured_oneshot/fullfinetune_sp90-86/final_model_0.89.pth',
+                    help='finetune 后的 state_dict')
+parser.add_argument('--arch_ckpt',  type=str,
+                    default='./structured_rl_ckpts/effnet/structured_oneshot/sp90-86/best_model_rwd-3.12pp.pth',
+                    help='存有剪枝后完整模型结构的 ckpt（torch.save(model, ...)）')
 parser.add_argument('--orig_ckpt',  type=str,
-                    default='./vgg16/checkpoint/pretrain_vgg16_ckpt.pth',
+                    default='./effnet/checkpoint/pretrain_effnet_ckpt.pth',
                     help='原始 dense 模型，用于算 channel sparsity')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 _, _, test_loader = data_loader(data_dir='./data')
-
 
 # ── 原始 dense 模型（只用来拿 original_channels）─────────────────────────────
 dense_model = model_loader(args.m_name, device)
@@ -27,16 +30,12 @@ original_channels = {name: m.out_channels
                      for name, m in dense_model.named_modules()
                      if isinstance(m, nn.Conv2d)}
 
-
-# ── 加载 finetune 后的模型 ────────────────────────────────────────────────────
-# fullfinetune 存的是 state_dict，需要先还原结构
-# 结构从 RL ckpt 里拿（整模型），再 load state_dict
-rl_model_path = 'structured_rl_ckpts/vgg16/structured_oneshot/sp0.952-0.93/best_model_rwd+3.86pp.pth'
-model = torch.load(rl_model_path, map_location=device, weights_only=False)
-model.load_state_dict(torch.load(args.model_path, map_location=device, weights_only=False))
+# ── 还原剪枝后的模型结构，再 load finetune state_dict ────────────────────────
+model = torch.load(args.arch_ckpt, map_location=device, weights_only=False)
+state_dict = torch.load(args.model_path, map_location=device, weights_only=False)
+model.load_state_dict(state_dict)
 model = model.to(device)
 model.eval()
-
 
 # ── 准确率 ────────────────────────────────────────────────────────────────────
 correct, total = 0, 0
@@ -48,7 +47,6 @@ with torch.no_grad():
         correct += pred.eq(y).sum().item()
 acc = 100.0 * correct / total
 
-
 # ── Channel Sparsity ──────────────────────────────────────────────────────────
 total_ch, remaining_ch = 0, 0
 for name, m in model.named_modules():
@@ -57,7 +55,7 @@ for name, m in model.named_modules():
         remaining_ch += m.out_channels
 channel_sparsity = 1 - remaining_ch / total_ch
 
-# ── 每层详情 ──────────────────────────────────────────────────────────────────
+# ── 输出 ──────────────────────────────────────────────────────────────────────
 print(f"\n{'=' * 60}")
 print(f"  Accuracy        : {acc:.2f}%")
 print(f"  Channel Sparsity: {channel_sparsity:.4f} ({channel_sparsity*100:.2f}%)")
