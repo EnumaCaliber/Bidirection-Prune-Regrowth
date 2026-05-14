@@ -152,7 +152,7 @@ def main():
     parser.add_argument('--ckpt',    type=str,
                         default=None,
                         help='单个 checkpoint 路径')
-    parser.add_argument('--dir',     type=str, default="./structured_rl_ckpts/effnet/structured_oneshot/sp0.890"
+    parser.add_argument('--dir',     type=str, default="./effnet/ckpt_after_prune_structured_oneshot"
 ,
                         help='目录，自动搜索所有 .pth 文件')
     parser.add_argument('--m_name',  type=str, default='effnet',
