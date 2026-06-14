@@ -1,44 +1,34 @@
 import torch
 import torch.nn as nn
-from utils.data_loader import data_loader
 from utils.model_loader import model_loader
+from utils.data_loader import data_loader
 import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--m_name',     type=str, default='effnet')
-parser.add_argument('--model_path', type=str,
-                    default='./structured_rl_ckpts/effnet/structured_oneshot/fullfinetune_sp0.952-0.93/best_model_rwd+3.86pp_full.pth')
+parser.add_argument('--model_path', type=str, required=True,
+                    help='_save_best 保存的 best_epXX_rwdXX.pth')
 parser.add_argument('--orig_ckpt',  type=str,
-                    default='./vgg16/checkpoint/pretrain_vgg16_ckpt.pth',
-                    help='原始 dense 模型，用于算 channel sparsity')
+                    default='./effnet/checkpoint/pretrain_effnet_ckpt.pth')
+parser.add_argument('--data_dir',   type=str, default='./data')
 args = parser.parse_args()
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-_, _, test_loader = data_loader(data_dir='./data')
+_, _, test_loader = data_loader(data_dir=args.data_dir)
 
-
-# ── 原始 dense 模型（只用来拿 original_channels）─────────────────────────────
+# ── 原始 dense 通道数（用于算稀疏度）─────────────────────────────────────────
 dense_model = model_loader(args.m_name, device)
-ckpt = torch.load(args.orig_ckpt, weights_only=False)
+ckpt = torch.load(args.orig_ckpt, map_location=device, weights_only=False)
 dense_model.load_state_dict(ckpt['net'])
-dense_model.eval()
-
-original_channels = {name: m.out_channels
-                     for name, m in dense_model.named_modules()
+original_channels = {n: m.out_channels for n, m in dense_model.named_modules()
                      if isinstance(m, nn.Conv2d)}
 
-
-# ── 加载 finetune 后的模型 ────────────────────────────────────────────────────
-# fullfinetune 存的是 state_dict，需要先还原结构
-# 结构从 RL ckpt 里拿（整模型），再 load state_dict
-rl_model_path = 'structured_rl_ckpts/vgg16/structured_oneshot/sp0.952-0.93/best_model_rwd+3.86pp.pth'
-model = torch.load(rl_model_path, map_location=device, weights_only=False)
-model.load_state_dict(torch.load(args.model_path, map_location=device, weights_only=False))
+# ── 直接加载完整模型（_save_best 用 torch.save(model, p) 存的）──────────────
+model = torch.load(args.model_path, map_location=device, weights_only=False)
 model = model.to(device)
 model.eval()
 
-
-# ── 准确率 ────────────────────────────────────────────────────────────────────
+# ── 精度 ──────────────────────────────────────────────────────────────────────
 correct, total = 0, 0
 with torch.no_grad():
     for x, y in test_loader:
@@ -48,8 +38,7 @@ with torch.no_grad():
         correct += pred.eq(y).sum().item()
 acc = 100.0 * correct / total
 
-
-# ── Channel Sparsity ──────────────────────────────────────────────────────────
+# ── 稀疏度 ────────────────────────────────────────────────────────────────────
 total_ch, remaining_ch = 0, 0
 for name, m in model.named_modules():
     if isinstance(m, nn.Conv2d) and name in original_channels:
@@ -57,7 +46,7 @@ for name, m in model.named_modules():
         remaining_ch += m.out_channels
 channel_sparsity = 1 - remaining_ch / total_ch
 
-# ── 每层详情 ──────────────────────────────────────────────────────────────────
+# ── 输出 ──────────────────────────────────────────────────────────────────────
 print(f"\n{'=' * 60}")
 print(f"  Accuracy        : {acc:.2f}%")
 print(f"  Channel Sparsity: {channel_sparsity:.4f} ({channel_sparsity*100:.2f}%)")

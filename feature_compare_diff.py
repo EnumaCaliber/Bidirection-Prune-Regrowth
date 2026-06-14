@@ -8,10 +8,10 @@ import numpy as np
 from utils.model_loader import model_loader
 
 MODELS = {
-    "resnet20": {
-        "pretrained":  "resnet20/checkpoint/pretrain_resnet20_ckpt.pth",
-        "pruned-high": "resnet20/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9903.pth",
-        "pruned-low":  "resnet20/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9424.pth",
+    "vgg16": {
+        "pretrained":  "vgg16/checkpoint/pretrain_vgg16_ckpt.pth",
+        "pruned-high": "vgg16/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9953.pth",
+        "pruned-low":  "vgg16/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9424.pth",
     },
 }
 

@@ -29,7 +29,7 @@ DEVICE       = "cuda" if torch.cuda.is_available() else "cpu"
 
 # One structured pruned model to inspect
 # (change to whichever checkpoint you want to visualise)
-PRUNED_CKPT  = "vgg16/ckpt_structured_iterative/step22_sp0.874.pth"
+PRUNED_CKPT  = "vgg16/ckpt_structured_iterative/step19_sp0.754.pth"
 PRUNED_LABEL = "Structured (87% sparsity)"
 
 OUT_DIR      = "channel_plots"   # output folder
@@ -125,7 +125,8 @@ def plot_layer(layer_name, activity, pruned_label, out_path):
     colors  = np.where(activity, COLOR_ACTIVE, COLOR_PRUNED)
     xs      = np.arange(d_out)
 
-    fig, ax = plt.subplots(figsize=(max(6, d_out / 30), 3.2))
+    size = max(4, d_out / 50)
+    fig, ax = plt.subplots(figsize=(size, size))  # square figure
     fig.patch.set_facecolor("#FDFAF5")
     ax.set_facecolor("#FDFAF5")
 
@@ -135,9 +136,9 @@ def plot_layer(layer_name, activity, pruned_label, out_path):
     ax.set_xlim(-1, d_out)
     ax.set_ylim(-1.25, 1.25)
     ax.set_yticks([-1, -0.5, 0, 0.5, 1])
-    ax.set_yticklabels(["-1", "", "0", "", "1"], fontsize=8)
-    ax.set_xlabel("Channel Index", fontsize=9)
-    ax.set_ylabel("Active (1) / Pruned (-1)", fontsize=9)
+    ax.set_yticklabels(["-1", "", "0", "", "1"], fontsize=7)
+    ax.set_xlabel("Channel Index", fontsize=8)
+    ax.set_ylabel("Active (1) / Pruned (-1)", fontsize=8)
 
     for sp in ["top", "right"]:
         ax.spines[sp].set_visible(False)
@@ -147,7 +148,7 @@ def plot_layer(layer_name, activity, pruned_label, out_path):
 
     ax.set_title(
         f"{pruned_label}: {n_pruned}/{d_out} channels pruned ({pct:.1f}%)  —  {layer_name}",
-        fontsize=9.5, pad=8, color="#222222"
+        fontsize=8.5, pad=6, color="#222222"
     )
 
     handles = [
@@ -156,11 +157,11 @@ def plot_layer(layer_name, activity, pruned_label, out_path):
         mpatches.Patch(facecolor=COLOR_PRUNED, edgecolor="none",
                        label=f"Pruned ({n_pruned})"),
     ]
-    ax.legend(handles=handles, loc="lower right", fontsize=8,
+    ax.legend(handles=handles, loc="lower right", fontsize=7,
               framealpha=0.9, edgecolor="#dddddd")
 
     plt.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight", dpi=180, facecolor="white")
+    plt.savefig(out_path, bbox_inches="tight", dpi=150, facecolor="white")  # PNG, lower dpi
     plt.close()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -179,7 +180,7 @@ def main():
 
     print(f"Saving plots to '{OUT_DIR}/' …")
     for layer_name, act in activity.items():
-        fname    = layer_name.replace(".", "_") + ".pdf"
+        fname    = layer_name.replace(".", "_") + ".png"   # PNG format
         out_path = os.path.join(OUT_DIR, fname)
         plot_layer(layer_name, act, PRUNED_LABEL, out_path)
         n_kept = act.sum()
