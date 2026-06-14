@@ -6,9 +6,9 @@ from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--m_name', type=str, default='resnet20')
-parser.add_argument('--model_path', type=str, default='./resnet20/checkpoint/pretrain_resnet20_ckpt.pth')
-parser.add_argument('--seed', type=int, default=42)
+parser.add_argument('--m_name', type=str, default='vgg16')
+parser.add_argument('--model_path', type=str, default='./vgg16/checkpoint/pretrain_vgg16_100_ckpt.pth')
+parser.add_argument('--seed', type=int, default=100)
 parser.add_argument('--data_dir', type=str, default='./data')
 args = parser.parse_args()
 

@@ -11,9 +11,9 @@ from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--m_name', type=str, default='effnet')
-parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/effnet/iterative/iter_0/best_grown_model.pth')
-# parser.add_argument('--model_path', type=str, default='./rl_saliency_checkpoints/effnet/oneshot/0.94fullfinetune/final_model_0.94.pth')
+parser.add_argument('--m_name', type=str, default='effnet', help='模型名称')
+# parser.add_argument('--model_path', type=str, default='./vgg16/ckpt_after_prune_0.3_epoch_finetune_40/pruned_finetuned_mask_0.9953.pth')
+parser.add_argument('--model_path', type=str, default='rl_saliency_checkpoints/effnet/iterative/iter_0/best_grown_model.pth')
 # parser.add_argument('--model_path', type=str, default='./vgg16/ckpt_after_prune_oneshot/pruned_oneshot_mask_0.99.pth')
 parser.add_argument('--seed', type=int, default=42, help='random seed for reproducibility')
 parser.add_argument('--data_dir', type=str, default='./data')

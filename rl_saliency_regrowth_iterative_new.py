@@ -845,7 +845,7 @@ def get_sparsity(model):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name',   type=str,   default='shufflenetv2')
+    parser.add_argument('--m_name',   type=str,   default='resnet20')
     parser.add_argument('--data_dir', type=str,   default='./data')
     parser.add_argument('--method',   type=str,   default='iterative')
 

@@ -19,12 +19,12 @@ parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
 parser.add_argument('--resume', '-r', action='store_true',
                     help='resume from checkpoint')
-parser.add_argument('--m_name',type=str, default= "shufflenetv2",
+parser.add_argument('--m_name',type=str, default= "vgg16",
                     help='Model name (e.g., resnet18, vgg16, etc.)')
 parser.add_argument('--pruner', type=str, help='pruning method')
 parser.add_argument('--iter_start', type=int, default=1, help='start iteration for pruning')
 parser.add_argument('--iter_end', type=int, default=1, help='end iteration for pruning')
-parser.add_argument('--seed', type=int, default=42, help='random seed for reproducibility')
+parser.add_argument('--seed', type=int, default=100, help='random seed for reproducibility')
 parser.add_argument('--max_epochs', type=int, default=1000, help='maximum pretraining epochs')
 parser.add_argument('--patience', type=int, default=30, help='early stopping patience (epochs without improvement)')
 
@@ -50,7 +50,7 @@ epochs_without_improvement = 0  # For early stopping
 
 
 run = wandb.init(
-    project="model-pretrain-baseline",  
+    project=f"model-pretrain-baseline_seed{args.seed}",
     config=args,                        
     name=f"{args.m_name}_pretrain",
 )
@@ -69,8 +69,8 @@ net = model_loader(args.m_name, device)
 if args.resume:
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
-    assert os.path.isdir(f'./{args.m_name}/checkpoint'), 'Error: no checkpoint directory found!'
-    checkpoint = torch.load(f'./{args.m_name}/checkpoint/ckpt.pth')
+    assert os.path.isdir(f'./{args.m_name}_{args.seed}/checkpoint'), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load(f'./{args.m_name}_{args.seed}/checkpoint/ckpt.pth')
     net.load_state_dict(checkpoint)
     net.eval()
 
@@ -154,7 +154,7 @@ def evaluate(epoch):
         os.makedirs(target_folder, exist_ok=True)
         # if not os.path.isdir('checkpoint'):
         #     os.mkdir('checkpoint')
-        ckpt_filename = f"pretrain_{args.m_name}_ckpt.pth"
+        ckpt_filename = f"pretrain_{args.m_name}_{args.seed}_ckpt.pth"
         target_path = os.path.join(target_folder, ckpt_filename)
         torch.save(state, target_path)
         best_acc = acc

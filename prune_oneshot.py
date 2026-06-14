@@ -15,7 +15,6 @@ import wandb
 from functools import partial
 
 from iclr2021_solution.tools.train import trainer_loader_wandb
-from utils.utils import progress_bar
 from utils.model_loader import model_loader
 from utils.data_loader import data_loader
 from iclr2021_solution.tools import *

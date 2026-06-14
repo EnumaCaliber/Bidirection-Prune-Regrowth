@@ -22,11 +22,11 @@ from iclr2021_solution.tools import *
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Prune')
 
-parser.add_argument('--m_name', type=str, default="shufflenetv2",
+parser.add_argument('--m_name', type=str, default="vgg16",
                     help='Model name (e.g., resnet18, vgg16, etc.)')
 # desnet, effnet, resnet20, vgg16
 parser.add_argument('--pruner', type=str, default='lamp', help='pruning method')
-parser.add_argument('--seed', type=int, default=42, help='random seed for reproducibility')
+parser.add_argument('--seed', type=int, default=100, help='random seed for reproducibility')
 parser.add_argument('--m_prune', type=str, default='iterate', help="oneshot and iterate")
 parser.add_argument('--iter_start', type=int, default=1, help='start iteration for pruning')
 parser.add_argument('--iter_end', type=int, default=15, help='end iteration for pruning')
@@ -37,7 +37,7 @@ args = parser.parse_args()
 run = wandb.init(
     project="model-prune-iterate-0-3-finetune-40-epoch",
     config=args,
-    name=f"{args.m_name}_prune_{args.pruner}",
+    name=f"{args.m_name}_prune_{args.pruner}_100",
 )
 
 import random
@@ -57,7 +57,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 train_loader, val_loader, test_loader = data_loader(data_dir='./data')
 
 net = model_loader(args.m_name, device)
-cktp = f'pretrain_{args.m_name}_ckpt.pth'
+cktp = f'pretrain_{args.m_name}_{args.seed}_ckpt.pth'
 checkpoint = torch.load(f'./{args.m_name}/checkpoint/{cktp}')
 net.load_state_dict(checkpoint['net'])
 net.eval()
@@ -75,7 +75,7 @@ utils.prune_weights_reparam(net)
 
 """ PRUNE AND RETRAIN """
 
-target_folder = f'./{args.m_name}/ckpt_after_prune'
+target_folder = f'./{args.m_name}/ckpt_after_prune_{args.seed}'
 os.makedirs(target_folder, exist_ok=True)
 
 import csv
