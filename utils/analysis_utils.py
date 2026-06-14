@@ -36,7 +36,7 @@ def load_model_name(net, ckpt_path,name):
     # Load checkpoint.
     print('==> Resuming from checkpoint..')
     assert os.path.isdir(ckpt_path), 'Error: no checkpoint directory found!'
-    target_path = os.path.join(ckpt_path, f"pretrain_{name}_ckpt.pth")
+    target_path = os.path.join(ckpt_path, f"pretrain_{name}_1_ckpt.pth")
     checkpoint = torch.load(target_path)
 
     # # Strip 'module.' prefix from keys

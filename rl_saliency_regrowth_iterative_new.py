@@ -24,9 +24,11 @@ import numpy as np
 import argparse
 import copy
 import os
+import re
 import time
 import wandb
 import random
+from pathlib import Path
 from torch.distributions import Categorical
 from collections import deque
 from tqdm import tqdm
@@ -50,117 +52,52 @@ def set_seed(seed=42):
     torch.backends.cudnn.benchmark = False
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Pre-loaded Baseline  (from the iterative-pruning Excel table)
-# ═══════════════════════════════════════════════════════════════════════════════
+def load_baseline_from_folder(model_name, model_dir, device, test_loader):
+    model_path = Path(model_dir)
+    pth_files = sorted(model_path.glob("*.pth"))
+    if not pth_files:
+        raise ValueError(f"No .pth files found in {model_dir}")
 
-# ── Per-model baseline tables  (sparsity → test_accuracy %) ─────────────────
-ITERATIVE_BASELINE_TABLES = {
-    'densenet': {
-        0.30:   93.22,
-        0.51:   93.53,
-        0.657:  93.96,
-        0.7599: 93.90,
-        0.8319: 93.97,
-        0.8824: 93.96,
-        0.9176: 93.60,
-        0.9424: 93.74,
-        0.9596: 93.52,
-        0.9718: 93.46,
-        0.9802: 93.00,
-        0.9862: 92.30,
-        0.9903: 91.83,
-        0.9932: 90.48,
-        0.9953: 88.09,
-    },
-    'effnet': {
-        0.30:   89.42,
-        0.51:   89.42,
-        0.657:  89.39,
-        0.7599: 89.33,
-        0.8319: 89.57,
-        0.8824: 89.56,
-        0.9176: 89.75,
-        0.9424: 89.48,
-        0.9596: 89.25,
-        0.9718: 88.87,
-        0.9802: 88.35,
-        0.9862: 87.54,
-        0.9903: 86.21,
-        0.9932: 83.89,
-        0.9953: 80.14,
-    },
-    'vgg16': {
-        0.30:   91.58,
-        0.51:   91.93,
-        0.657:  91.96,
-        0.7599: 92.28,
-        0.8319: 92.27,
-        0.8824: 92.40,
-        0.9176: 92.65,
-        0.9424: 92.51,
-        0.9596: 92.27,
-        0.9718: 92.01,
-        0.9802: 91.76,
-        0.9862: 91.29,
-        0.9903: 90.63,
-        0.9932: 89.89,
-        0.9953: 89.22,
-    },
-    'resnet20': {
-        0.30:   91.61,
-        0.51:   91.48,
-        0.657:  91.59,
-        0.7599: 91.09,
-        0.8319: 90.48,
-        0.8824: 89.65,
-        0.9176: 88.70,
-        0.9424: 87.68,
-        0.9596: 86.38,
-        0.9718: 84.94,
-        0.9802: 82.51,
-        0.9862: 79.27,
-        0.9903: 76.07,
-        0.9932: 69.04,
-        0.9953: 60.64,
-    },
+    print("=" * 60)
+    baseline_dict = {}
+    for pth_file in pth_files:
+        match = re.search(r'(\d+\.\d+)', pth_file.name)
+        if not match:
+            print(f"  Warning: cannot extract sparsity from: {pth_file.name}")
+            continue
+        sparsity = float(match.group(1))
+        try:
+            sd = torch.load(pth_file, map_location=device)
+            merged = {}
+            for k, v in sd.items():
+                if k.endswith('_orig'):
+                    base = k[:-5]
+                    merged[base] = v * sd[base + '_mask']
+                elif not k.endswith('_mask'):
+                    merged[k] = v
+            model = model_loader(model_name, device)
+            model.load_state_dict(merged)
+            model.eval()
+            correct, total = 0, 0
+            with torch.no_grad():
+                for inputs, targets in test_loader:
+                    inputs, targets = inputs.to(device), targets.to(device)
+                    _, predicted = model(inputs).max(1)
+                    total += targets.size(0)
+                    correct += predicted.eq(targets).sum().item()
+            accuracy = 100.0 * correct / total
+            baseline_dict[sparsity] = accuracy
+            print(f"  {pth_file.name}: sparsity={sparsity:.4f}, accuracy={accuracy:.2f}%")
+        except Exception as e:
+            print(f"  Error processing {pth_file.name}: {e}")
 
-    'googlenet': {
-        0.3:	92.73,
-        0.51:	93.21,
-        0.657:	93.53,
-        0.7599:	93.57,
-        0.8319:	93.47,
-        0.8824:	93.58,
-        0.9176:	93.41,
-        0.9424:	93.12,
-        0.9596:	92.7,
-        0.9718:	92.64,
-        0.9802:	92.07,
-        0.9862:	91.61,
-        0.9903:	90.82,
-        0.9932:	89.44,
-        0.9953:	87.8,
-    },
-    'shufflenetv2':{
-        0.3:	91.07,
-        0.51:	91.07,
-        0.657:	91.04,
-        0.7599:	91.39,
-        0.8319:	91.41,
-        0.8824:	91.54,
-        0.9176:	91.41,
-        0.9424:	91.38,
-        0.9596:	91.17,
-        0.9718:	91.16,
-        0.9802:	90.71,
-        0.9862:	90.08,
-        0.9903:	89.62,
-        0.9932:	88.59,
-        0.9953:	87.04,
-    }
-
-}
+    baseline_dict = dict(sorted(baseline_dict.items()))
+    if not baseline_dict:
+        raise ValueError(f"No valid baseline checkpoints in {model_dir}")
+    print(f"\nBaseline table built: {len(baseline_dict)} points  "
+          f"sparsity {min(baseline_dict):.4f}~{max(baseline_dict):.4f}")
+    print("=" * 60 + "\n")
+    return baseline_dict
 
 
 class BaselineInterpolator:
@@ -243,7 +180,7 @@ class SSIMLayerSelector:
 
         ssim_dict, selected = {}, []
         for lname in all_masked:
-            score = float(block_ssim.get(lname, 0.0))
+            score = float(block_ssim.get(lname, 0.5))
             ssim_dict[lname] = score
             if score < threshold:
                 selected.append(lname)
@@ -845,14 +782,14 @@ def get_sparsity(model):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--m_name',   type=str,   default='resnet20')
+    parser.add_argument('--m_name',   type=str,   default='vgg16')
     parser.add_argument('--data_dir', type=str,   default='./data')
     parser.add_argument('--method',   type=str,   default='iterative')
 
     # Sparsity
-    parser.add_argument('--start_sparsity',  type=float, default=0.9903)
+    parser.add_argument('--start_sparsity',  type=float, default=0.9953)
     parser.add_argument('--target_sparsity', type=float, default=0.97)
-    parser.add_argument('--num_iters',       type=int,   default=20)
+    parser.add_argument('--num_iters',       type=int,   default=5)
 
     # RL
     parser.add_argument('--num_epochs',        type=int,   default=300)
@@ -873,7 +810,7 @@ def main():
     parser.add_argument('--max_budget_frac', type=float, default=0.005)
 
     # SSIM layer selection
-    parser.add_argument('--ssim_threshold', type=float, default=0,
+    parser.add_argument('--ssim_threshold', type=float, default=0.3,
                         help='Layers with feature-SSIM < this value enter the RL '
                              'search space each iteration. Feature-SSIM can go below -1.')
     parser.add_argument('--ssim_num_batches', type=int, default=128,
@@ -890,10 +827,14 @@ def main():
     parser.add_argument('--reward_window_size',    type=int,   default=20)
 
     # Misc
-    parser.add_argument('--save_dir',    type=str, default='./rl_checkpoints')
-    parser.add_argument('--resume',      type=str, default=None)
-    parser.add_argument('--resume_iter', type=int, default=0)
-    parser.add_argument('--seed',        type=int, default=42)
+    parser.add_argument('--save_dir',      type=str, default='./rl_checkpoints_1')
+    parser.add_argument('--resume',        type=str, default=None)
+    parser.add_argument('--resume_iter',   type=int, default=0)
+    parser.add_argument('--seed',          type=int, default=1)
+    parser.add_argument('--baseline_dir',  type=str,
+                        default='./vgg16/ckpt_after_prune_1')
+    parser.add_argument('--initial_ckpt',  type=str,
+                        default='./vgg16/ckpt_after_prune_1/pruned_finetuned_mask_0.9953.pth')
 
     args = parser.parse_args()
     set_seed(args.seed)
@@ -903,15 +844,13 @@ def main():
 
     train_loader, _, test_loader = data_loader(data_dir=args.data_dir)
 
-    # ── Initial checkpoint path (per model) ──────────────────────────────────
+    # ── Baseline: scan folder, evaluate all checkpoints ──────────────────────
+    baseline_dict = load_baseline_from_folder(
+        model_name=args.m_name, model_dir=args.baseline_dir,
+        device=device, test_loader=test_loader)
+    baseline_interp = BaselineInterpolator(baseline_dict)
 
-    initial_ckpt = (f'./{args.m_name}/ckpt_after_prune_0.3_epoch_finetune_40/'
-                    f'pruned_finetuned_mask_0.9903.pth')
-
-    # ── Pre-loaded baseline (per model) ──────────────────────────────────────
-    assert args.m_name in ITERATIVE_BASELINE_TABLES, \
-        f"No baseline table for '{args.m_name}'. Add it to ITERATIVE_BASELINE_TABLES."
-    baseline_interp = BaselineInterpolator(ITERATIVE_BASELINE_TABLES[args.m_name])
+    initial_ckpt = args.initial_ckpt
 
     # ── Total prunable weights ────────────────────────────────────────────────
     _ref = model_loader(args.m_name, device)
